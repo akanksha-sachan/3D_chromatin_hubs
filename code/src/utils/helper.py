@@ -1,0 +1,1 @@
+#code to assign bins to anchors etc, other things to be done to all feature calls etc
