@@ -1,2 +1,0 @@
-# for bulk data: observation suggests that .hic files are always available, .pairs are available as well. need .mcool for further python/pandas processing as .hic is processed in java
-# use fanC api for pre-processing inputs

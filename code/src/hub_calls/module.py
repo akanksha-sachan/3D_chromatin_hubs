@@ -1,1 +1,0 @@
-## clustering spectral/hierarchical bayesian (to capture the std dev apart from just mean post norm of a signal) etc

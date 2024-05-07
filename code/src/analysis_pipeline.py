@@ -62,9 +62,9 @@ def filter_pairs(chrom_sizes_file, input_file, output_file):
                 continue
                 
 def bin_reference_genome(chromsize_file, res=[10000], tmp_dir='tmp'):
+    
     """
     Bin the reference genome hg19/hg38.fa into bed files at specific resolutions; can pass multires list
-    """
     # Ensure the temporary directory exists
     if not os.path.exists(tmp_dir):
         os.makedirs(tmp_dir)
@@ -81,7 +81,9 @@ def bin_reference_genome(chromsize_file, res=[10000], tmp_dir='tmp'):
             bed[-1][-1] = chromsize[c]
             np.savetxt(os.path.join(res_dir, f'{c}.bed'), bed, fmt='%s', delimiter='\t')
             print(resolution, c)
-    return 0
+    """
+    #use bedtools instead (make windows)
+    pass
     
 def assign_bins_to_bed(bed, bins):
     """
