@@ -40,12 +40,36 @@ def convertGenCoordsToBinPos(genCoords, resolution):
     """
     Convert genomic coordinates (base pairs) to bin positions (indices used in matrix representation) of a given resolution
     Assumption: genomic coordinates are from the same chromosome
+    pos1 = np.array(data['pos1'])
+	pos2 = np.array(data['pos2'])
+	bin1 = np.floor(pos1 / res).astype('int')
+	bin2 = np.floor(pos2 / res).astype('int')
     """
     regionIndices = [0]*len(genCoords)
-    for i in range(len(genCoords)):
-        regionIndices[i] = genCoords[i]//resolution
+    for index, coord in enumerate(genCoords):
+        regionIndices[index] = coord // resolution
     return regionIndices
 
+def standardize_chromosome(input_chrom, chrom_keys):
+    """
+    UTIL
+    Normalize input chromosome name to match keys in the chrom_indices.
+    Handles common chromosome naming conventions.
+    """
+    # Check direct match
+    if input_chrom in chrom_keys:
+        return input_chrom
+    # Check with 'chr' prefix
+    prefixed_chrom = f"chr{input_chrom}"
+    if prefixed_chrom in chrom_keys:
+        return prefixed_chrom
+    # Remove 'chr' prefix if present and check
+    if input_chrom.startswith('chr'):
+        stripped_chrom = input_chrom[3:]
+        if stripped_chrom in chrom_keys:
+            return stripped_chrom
+    # If no match found, return None or raise an error
+    return None
 
 #test function
 chromsizes_file = '/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/hg38.chrom.sizes'
