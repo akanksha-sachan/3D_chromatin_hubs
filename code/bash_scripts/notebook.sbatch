@@ -33,4 +33,4 @@ echo -e "
 
 
 # start an ipcluster instance and launch jupyter server
-jupyter-lab --NotebookApp.iopub_data_rate_limit=100000000000000 --no-browser --port=$ipnport --ip=$ipnip --NotebookApp.password='' --NotebookApp.token=''
+jupyter-lab --NotebookApp.iopub_data_rate_limit=100000000000000 --no-browser --port=$ipnport --ip=$ipnip --NotebookApp.password='' --NotebookApp.token='' --notebook-dir=/work/magroup/asachan2/genomic_hubs
