@@ -4,7 +4,7 @@ setup(
     name="3D-genome-hubs",
     version="0.1.0",
     author="Akanksha Sachan",
-    author_email="akanksha@example.com",
+    author_email="akanksha.11.05.07@gmail.com",
     description="A package for processing bulk 3D genome data and identifying genomic hubs of cis and trans regulatory elements responsible for gene regulation.",
     long_description=open("README.md", encoding='utf-8').read(),
     long_description_content_type="text/markdown",
