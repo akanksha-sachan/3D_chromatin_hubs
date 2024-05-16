@@ -9,8 +9,8 @@ setup(
     long_description=open("README.md", encoding='utf-8').read(),
     long_description_content_type="text/markdown",
     url="https://github.com/akanksha-sachan/3D-genome-hubs",
-    packages=find_packages(where="src"),  # Automatically find packages under 'src'
-    package_dir={"": "src"},  # Root directory for packages is 'src'
+    packages=find_packages(where="src"),  
+    package_dir={"": "src"},  # root is 'src'
     include_package_data=True,
     classifiers=[
         "Programming Language :: Python :: 3",
@@ -22,13 +22,12 @@ setup(
         "numpy>=1.19.5",
         "scipy>=1.5.4",
         "pandas>=1.1.5",
-        "hicstraw>=0.0.1",  # Replace with actual versions
+        "hicstraw>=0.0.1",  # update versions
         "cooler>=0.8.11",
-        # Add any other dependencies
     ],
     entry_points={
         "console_scripts": [
-            # Define CLI entry points if needed, for example:
+            # CLI entry points:
             "process-2d-contacts=src.preprocessing._2Dcontacts_processing:main",
         ],
     },
