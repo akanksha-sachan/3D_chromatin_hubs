@@ -5,10 +5,11 @@ class GenomicParams:
     """Class to store genomic parameters for the workflow"""
 
     def __init__(self):
-        self.cell_types = ["GM12878", "K562"]
-        self.ref_genome = "hg38"
-        self.resolutions = [1000000, 10000]
-        self.res_strs = ["1Mb", "10kb"]
+        self.cell_types = ["GM12878"]
+        self.ref_genome = "hg38" #used to read paths dynamically in config file
+        self.resolutions = [1000000, 10000] #list of integers
+        self.res_strs = ["1Mb", "10kb"] #list of strings based on standard naming convention of resolutions
+        self.norm = "VC" #vanilla coverage normalization``
         self.chromosomes = [
             "chr1",
             "chr2",
@@ -34,7 +35,7 @@ class GenomicParams:
             "chr22",
             "chrX",
             "chrY",
-        ]
+        ] #list of strings based on standard naming convention of chromosomes
 
 
 class Paths:
@@ -62,9 +63,9 @@ class Paths:
 
     def initialize_hic_paths(self):
         """Initialize paths for Hi-C data"""
-        self.cool_file = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DN Data Portal_hg19/4DNFITRVKRPA_GM12878.mcool"
+        self.cool_file = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DN_dataportal_{self.ref_genome}/4DNFITRVKRPA.mcool"
         self.hic_file = (
-            "https://www.encodeproject.org/files/ENCFF318GOM/@@download/ENCFF318GOM.hic"
+            f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DN_dataportal_{self.ref_genome}/4DNFI9YAVTI1.hic"
         )
 
     def initialize_temp_paths(self):

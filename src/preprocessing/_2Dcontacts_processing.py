@@ -1,24 +1,33 @@
 ######### CONTACT MATRIX (.hic/.mcool) QUERYING for Observed and OE counts #########
 
-#import io
+# import io
 import json
 import os
 import struct
 import subprocess
-
+import sys
 import cooler
 import hicstraw
-#import numba as njit
+
+# import numba as njit
 import numpy as np
 from memory_profiler import profile
 from scipy.sparse import csr_matrix
 
-# import utils from current working code dir
-from ..configs.config1 import Config
+# parallel processing
+import multiprocessing
+
+# add the parent directory of 'src' to the sys.path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# relative and absolute imports for running module and script respectively
+try:
+    from ..configs.config1 import Config
+except ImportError:
+    from configs.config1 import Config
 
 
 ###### .mcool/.hic file querying  ######
-
 
 class Query:
     """
@@ -27,18 +36,39 @@ class Query:
 
     def __init__(self, config):
         self.config = config
-        self.resolution = config.paths.resolution
-        self.c =  cooler.Cooler(config.paths.cool_file +'::/resolutions/'+str(self.resolution)) #cool object
-        self.hic = hicstraw.HiCFile(config.paths.hic_file)
+        self.res_list = config.genomic_params.resolutions
+        self.res_strings = config.genomic_params.res_strs
         self.temp_dir = config.paths.temp_dir
+        self.norm = config.genomic_params.norm
+
+        #check if input is .mcool or .hic
+        if self.is_hic_file(config.paths.hic_file):
+            self.hic = hicstraw.HiCFile(config.paths.hic_file)  # pylint: disable=c-extension-no-member
+            self.c = None
+            print("Initialized Hi-C file.")
+        else:
+            self.c = cooler.Cooler(f"{config.paths.cool_file}::/resolutions/{self.resolution}")
+            self.hic = None
+            print("Initialized Cool file.")
+        
         if not os.path.exists(self.temp_dir):
             os.mkdir(self.temp_dir)
 
-    def get_chromsizes(self):
+    def is_hic_file(self, path):
         """
-        Get chromosomes from .mcool/.hic file
+        Check if the file is a .hic file based on the extension
         """
-        return self.c.chromnames
+        return path.endswith(".hic")
+    
+    def resolution_present_in_hic(self):
+        """
+        Check if the resolution is present in the .hic file
+        """
+        if self.hic is not None:
+            return self.resolution in self.hic.getResolutions()
+        raise ValueError("Queried resolution not present in .hic file")
+
+    def normalisation_present_in_hic(self, norm):
 
     def get_bins(self, chrom):
         """
@@ -125,9 +155,9 @@ class Query:
             attrs[key] = value
         info["Attributes"] = attrs
 
-        nChrs = struct.unpack("<i", req.read(4))[0]
+        n_chrs = struct.unpack("<i", req.read(4))[0]
         chromsizes = {}
-        for i in range(nChrs):
+        for _ in range(n_chrs):
             name = self.readcstr(req)
             length = struct.unpack("<i", req.read(4))[0]
             if name != "ALL":
@@ -136,14 +166,14 @@ class Query:
         info["chromsizes"] = chromsizes
 
         info["Base pair-delimited resolutions"] = []
-        nBpRes = struct.unpack("<i", req.read(4))[0]
-        for i in range(nBpRes):
+        n_bp_res = struct.unpack("<i", req.read(4))[0]
+        for _ in range(n_bp_res):
             res = struct.unpack("<i", req.read(4))[0]
             info["Base pair-delimited resolutions"].append(res)
 
         info["Fragment-delimited resolutions"] = []
-        nFrag = struct.unpack("<i", req.read(4))[0]
-        for i in range(nFrag):
+        n_frag = struct.unpack("<i", req.read(4))[0]
+        for i in range(n_frag):
             res = struct.unpack("<i", req.read(4))[0]
             info["Fragment-delimited resolutions"].append(res)
         return info
@@ -425,3 +455,11 @@ class Process:
 
         return [x, i, k]
 
+# write main 
+
+if __name__ == "__main__":
+    config = Config('GM12878', 1000000)
+    #want to check hic_geader function on the hic file mentioned in paths
+    query = Query(config)
+    inform = query.read_hic_header(config.paths.hic_file)
+    print(inform)

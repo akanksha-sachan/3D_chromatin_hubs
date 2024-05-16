@@ -4,6 +4,7 @@
 
 import networkx as nx
 import numpy as np
+from sklearn.cluster import KMeans
 
 class Graph:
     def __init__(self, edges):
@@ -23,9 +24,8 @@ class SpectralClustering:
     def __init__(self, graph, n_clusters):
         self.graph = graph
         self.n_clusters = n_clusters
-        self.clusters = self.cluster()
         
-    def cluster(self):
+    def kmeans_cluster(self):
         A = nx.adjacency_matrix(self.graph)
         L = nx.laplacian_matrix(self.graph)
         eigvals, eigvecs = np.linalg.eig(L.toarray())
@@ -34,5 +34,4 @@ class SpectralClustering:
         kmeans.fit(eigvecs[:, 1:self.n_clusters+1])
         return kmeans.labels_
     
-    def get_clusters(self):
-        return self.clusters
+   
