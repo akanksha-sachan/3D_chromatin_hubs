@@ -52,7 +52,7 @@ class Paths:
     def initialize_rnaseq_paths(self):
         """Initialize paths for RNA-seq data"""
         self.gtf_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/gencode.v45.basic.annotation.{self.ref_genome}.gtf"
-        self.rnaseq_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/ENCODE_hg38/RNA_ENCSR820PHH/ENCFF345SHY_gene_quant.tsv"
+        self.rnaseq_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/ENCODE_4/RNA_ENCSR820PHH/ENCFF345SHY_gene_quant.tsv"
         self.expressed_genes_outfile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/expressed_genes_{self.ref_genome}_{self.cell_type}.txt"
         self.gene_chrom_bin_num_outfile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/gene_chrom_bin_num_{self.ref_genome}_{self.cell_type}.txt"
 
@@ -70,7 +70,7 @@ class Paths:
     def initialize_temp_paths(self):
         """Initialize paths for temporary files"""
         self.temp_dir = (
-            f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/code/temp/{self.cell_type}"
+            f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}"
         )
 
 
