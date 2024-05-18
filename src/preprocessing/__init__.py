@@ -7,3 +7,4 @@
 from .genes_processing import *
 from ._2Dcontacts_processing import *
 from ._1Dchromatin_processing import *
+from .interaction_validation import *

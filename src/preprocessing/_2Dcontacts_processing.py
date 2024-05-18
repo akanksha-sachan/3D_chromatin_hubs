@@ -1,11 +1,12 @@
 ######### CONTACT MATRIX (.hic/.mcool) QUERYING for Observed and OE counts #########
-
+# pylint: disable=all
 # import io
 import json
 import os
 import struct
 import subprocess
 import sys
+
 import cooler
 import hicstraw
 
@@ -15,7 +16,7 @@ from memory_profiler import profile
 from scipy.sparse import csr_matrix
 
 # parallel processing
-import multiprocessing
+# import multiprocessing
 
 # add the parent directory of 'src' to the sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -27,253 +28,127 @@ except ImportError:
     from configs.config1 import Config
 
 
-###### .mcool/.hic file querying  ######
+###### .mcool/.hic file querying, we know which format is the input  ######
+
 
 class Query:
     """
-    Querying .mcool/.hic files for observed and OE counts
+    Base class for querying .mcool/.hic files for observed and OE counts
     """
 
     def __init__(self, config):
         self.config = config
+        self.chromosomes = config.genomic_params.chromosomes
         self.res_list = config.genomic_params.resolutions
         self.res_strings = config.genomic_params.res_strs
         self.temp_dir = config.paths.temp_dir
-        self.norm = config.genomic_params.norm
-
-        #check if input is .mcool or .hic
-        if self.is_hic_file(config.paths.hic_file):
-            self.hic = hicstraw.HiCFile(config.paths.hic_file)  # pylint: disable=c-extension-no-member
-            self.c = None
-            print("Initialized Hi-C file.")
-        else:
-            self.c = cooler.Cooler(f"{config.paths.cool_file}::/resolutions/{self.resolution}")
-            self.hic = None
-            print("Initialized Cool file.")
-        
         if not os.path.exists(self.temp_dir):
             os.mkdir(self.temp_dir)
 
-    def is_hic_file(self, path):
-        """
-        Check if the file is a .hic file based on the extension
-        """
-        return path.endswith(".hic")
-    
-    def resolution_present_in_hic(self):
+
+class HiCQuery(Query):
+    """
+    Querying .hic files for observed and OE counts
+    """
+
+    def __init__(self, config):
+        super().__init__(config)  # instantiate parent class
+        self.hic_file = config.paths.hic_file  # path to .hic file
+        self.hic_norm = config.genomic_params.hic_norm  # normalization method to query
+        self.hic = hicstraw.HiCFile(self.hic_file)  # hic object from straw
+        print("HiC file loaded")
+
+        # checking for data availability
+        if not self.resolutions_present():
+            raise ValueError("Queried resolutions are not present in .hic file")
+
+        # TODO: add check for normalisation presence in .hic file
+
+    def resolutions_present(self) -> bool:
         """
         Check if the resolution is present in the .hic file
         """
-        if self.hic is not None:
-            return self.resolution in self.hic.getResolutions()
-        raise ValueError("Queried resolution not present in .hic file")
-
-    def normalisation_present_in_hic(self, norm):
-
-    def get_bins(self, chrom):
-        """
-        Get bins from .mcool/.hic file
-        """
-        bins = self.c.bins().fetch(chrom)
-        return bins
-
-    def get_observed(self, chrom):
-        """
-        Get observed counts from .mcool/.hic file
-        """
-        obs = self.c.matrix(balance=False).fetch(chrom)
-        return obs
-
-    def get_expected_hic(self, chrom):
-        """
-        Get expected counts from .hic file
-        """
-        exp = self.c.matrix(balance=True).fetch(chrom)
-        return exp
-
-    def get_oe_hic(self, chrom):
-        """
-        Get observed and expected counts from .mcool/.hic file
-        """
-        obs = self.get_observed(chrom)
-        exp = self.get_expected_hic(chrom)
-        return obs, exp
-
-    def get_interactions_sparse(self, chrom):
-        """
-        Get observed and expected counts from .mcool/.hic file as sparse matrices
-        """
-        obs = self.get_observed(chrom)
-        exp = self.get_expected_hic(chrom)
-        return csr_matrix(obs), csr_matrix(exp)
-
-    def readcstr(self, f):
-        """
-        Read a null-terminated string from a binary read mode
-        """
-        buf = ""
-        while True:
-            b = f.read(1)
-            b = b.decode("utf-8", "backslashreplace")
-            if b is None or b == "\0":
-                return str(buf)
-            else:
-                buf = buf + b
-
-    def read_hic_header(self, hicfile):
-        """
-        Read the header of a .hic binary file
-        """
-        if not os.path.exists(hicfile):
-            return None  # probably a cool URI
-
-        req = open(hicfile, "rb")
-        magic_string = struct.unpack("<3s", req.read(3))[0]
-        req.read(1)
-        if magic_string != b"HIC":
-            return None  # this is not a valid .hic file
-
-        info = {}
-        version = struct.unpack("<i", req.read(4))[0]
-        info["version"] = str(version)
-
-        masterindex = struct.unpack("<q", req.read(8))[0]
-        info["Master index"] = str(masterindex)
-
-        genome = ""
-        c = req.read(1).decode("utf-8")
-        while c != "\0":
-            genome += c
-            c = req.read(1).decode("utf-8")
-        info["Genome ID"] = str(genome)
-
-        nattributes = struct.unpack("<i", req.read(4))[0]
-        attrs = {}
-        for _ in range(nattributes):
-            key = self.readcstr(req)
-            value = self.readcstr(req)
-            attrs[key] = value
-        info["Attributes"] = attrs
-
-        n_chrs = struct.unpack("<i", req.read(4))[0]
-        chromsizes = {}
-        for _ in range(n_chrs):
-            name = self.readcstr(req)
-            length = struct.unpack("<i", req.read(4))[0]
-            if name != "ALL":
-                chromsizes[name] = length
-
-        info["chromsizes"] = chromsizes
-
-        info["Base pair-delimited resolutions"] = []
-        n_bp_res = struct.unpack("<i", req.read(4))[0]
-        for _ in range(n_bp_res):
-            res = struct.unpack("<i", req.read(4))[0]
-            info["Base pair-delimited resolutions"].append(res)
-
-        info["Fragment-delimited resolutions"] = []
-        n_frag = struct.unpack("<i", req.read(4))[0]
-        for i in range(n_frag):
-            res = struct.unpack("<i", req.read(4))[0]
-            info["Fragment-delimited resolutions"].append(res)
-        return info
+        available_resolutions = self.hic.getResolutions()
+        return all(res in available_resolutions for res in self.res_list)
 
     @profile
-    def get_available_normalisations(self, script_path):
+    def observed_intra(self, chrom, res):
         """
-        Javascript hic-straw to extract available normalisations
+        Returns a list of intrachr contacts
         """
-        try:
-            # Run the .mjs script and capture its output, with error checking
-            result = subprocess.run(
-                ["node", script_path], capture_output=True, text=True, check=True
-            )
-
-            # Parse the JSON output
-            output = json.loads(result.stdout)
-            print("Normalization Options:", output["normalizationOptions"])
-
-        except subprocess.CalledProcessError as e:
-            # Handle the case where the subprocess fails
-            print(f"Script execution failed with return code {e.returncode}")
-            print(f"Error message: {e.stderr}")
-
-        except json.JSONDecodeError as e:
-            # Handle the case where JSON decoding fails
-            print(f"Failed to decode JSON from the output: {e.msg}")
-
-    def csr_contact_matrix(
-        self, norm, hicfile, chr1loc, chr2loc, unit, binsize, is_synapse=False
-    ):
-        """
-        Extract a specific region of the contact matrix from .hic in scipy's CSR sparse format
-        limitations: simplistic storage in rows and columns, not genomic intervals and their indexing
-        """
-
-        tri_list = hicstraw.straw(
-            norm, hicfile, chr1loc, chr2loc, unit, binsize, is_synapse
+        chrom = chrom[3:]
+        res = int(res)
+        contacts_observed = hicstraw.straw(
+            "observed", self.hic_norm, self.hic_file, chrom, chrom, "BP", res
         )
-        row = [r // binsize for r in tri_list[0]]
-        col = [c // binsize for c in tri_list[1]]
-        value = tri_list[2]
-        N = max(col) + 1
+        return contacts_observed
 
-        # re-scale KR matrix to ICE-matrix range
-        M = csr_matrix((value, (row, col)), shape=(N, N), dtype=float)
-        margs = (
-            np.array(M.sum(axis=0)).ravel()
-            + np.array(M.sum(axis=1)).ravel()
-            - M.diagonal(0)
+    @profile
+    def oe_intra(self, chrom, res):
+        """
+        Returns a list of intrachr contacts
+        """
+        chrom = chrom[3:]
+        res = int(res)
+        contacts_oe = hicstraw.straw(
+            "oe", self.hic_norm, self.hic_file, chrom, chrom, "BP", res
         )
-        margs[np.isnan(margs)] = 0
-        scale = margs[margs != 0].mean()
-        row, col = M.nonzero()
-        value = M.data / scale
-        M = csr_matrix((value, (row, col)), shape=(N, N), dtype=float)
+        return contacts_oe
 
-        return M
+    def read_null_terminated_string(self, binary_file) -> str:
+        """
+        Read null terminated string from a binary file
+        """
+        string_buffer = ""
+        while True:
+            byte = binary_file.read(1)
+            if not byte:
+                # EOF (end of file) or read error
+                return string_buffer
 
-    def main(self, args):
-        """xyz"""
-        np.seterr(divide="ignore", invalid="ignore")
+            decoded_byte = byte.decode("utf-8", "backslashreplace")
+            if decoded_byte == "\0":
+                # Null terminator found, end the string
+                return string_buffer
 
-        # check if a file is .hic
-        check = self.read_hic_header(args.path)
-        if check is None:
-            hic = False
-        else:
-            hic = True
+            string_buffer += decoded_byte
 
-        totals = 0
-        if not hic:
-            Lib = cooler.Cooler(args.path)
-            genome_size = Lib.chromsizes.sum()
+    def read_hic_header(self, hic_file):
+        """
+        Read header of .hic file to get info
+        """
+        hic_header = {}
+        with open(hic_file, "rb") as f:
+            magic_string = struct.unpack("<3s", f.read(3))[0]
+            f.read(1)
+            if magic_string != b"HIC":
+                return None  # this is not a valid .hic file
+            version = struct.unpack("<i", f.read(4))[0]
+            master_index = struct.unpack("<q", f.read(8))[0]
+            hic_header["version"] = str(version)
+            hic_header["master_index"] = str(master_index)
+            genome = ""
+            c = f.read(1).decode("utf-8")
+            while c != "\0":
+                genome += c
+                c = f.read(1).decode("utf-8")
+            hic_header["genome_id"] = str(genome)
+            num_attributes = struct.unpack("<i", f.read(4))[0]
+            attrs = {}
+            for _ in range(num_attributes):
+                key = struct.unpack("<s", f.read(1))[0]
+                value = struct.unpack("<s", f.read(1))[0]
+                attrs[key] = value
+            hic_header["attributes"] = attrs
+            # num_chrs = struct.unpack("<i", f.read(4))[0]
+            # chroms = []
+            # for _ in range(num_chrs):
+            #     name = struct.unpack("<s", f.read(1))[0]
+            #     length = struct.unpack("<i", f.read(4))[0]
+            #     chroms.append((name, length))
+            # hic_header["chromosomes"] = chroms
 
-            mindis = args.min_dis // Lib.binsize
-
-            for k in Lib.chromnames[:]:
-                print(k)
-                intra = np.triu(
-                    Lib.matrix(balance=False, sparse=False).fetch(k), k=mindis
-                )
-                totals += int(intra.sum())
-
-        else:
-            hic_info = check
-            genome_size = sum(
-                [hic_info["chromsizes"][c] for c in hic_info["chromsizes"]]
-            )
-
-            for k in hic_info["chromsizes"]:
-                print(k)
-                try:
-                    lowres = max(hic_info["Base pair-delimited resolutions"])
-                    intra = hicstraw.straw("NONE", args.path, k, k, "BP", lowres)
-                    totals += sum(intra[2])  # intra is a list of list x, y, v
-                except:
-                    print("chrom", k, "failed")
-                    pass  # handle the inconsistency between .hic header and the matrix
-        return 0
+        return hic_header
 
 
 class Process:
@@ -287,48 +162,6 @@ class Process:
         self.resolutions = config["resolutions"]
         if not os.path.exists(self.temp_dir):
             os.mkdir(self.temp_dir)
-
-    def get_oe_cool(self, M, resolution, threshold=1):
-        """
-        The O/E matrix is calculated as the log2 ratio of the raw contact matrix to the expected contact matrix.
-        The expected contact matrix is calculated by filling in the average value of the diagonals of the raw contact matrix.
-        Remove the NaN bins before calculating O/E so that interpolated edges aren't used
-        """
-        # process M to mask out the centeromeric bins (NANs currently)
-        M = np.nan_to_num(M)
-
-        # construct expected matrix
-        E = np.zeros_like(M).astype(float)
-        sums = []
-        for i in range(M.shape[0]):
-            contacts = np.diag(M, i)
-            # using on non zero diagonal elements to get the denominator
-            non_zero_indices = np.nonzero(contacts)[0]
-            if len(non_zero_indices) > 0:
-                # chr wide expected, not factorized by number of chrs for genome-wide comparison
-                expected = contacts.sum() / len(non_zero_indices)
-
-            else:
-                expected = 0
-            sums.append(expected)
-            # uniform distribution of contacts across diagonals assumed
-            x_diag, y_diag = np.diag_indices(M.shape[0] - i)
-            x, y = x_diag, y_diag + i
-            E[x, y] = expected
-        E += E.T
-        eps = 1e-5
-        E = np.nan_to_num(E) + eps
-        OE = M / E
-        OE[OE == 0] = 1  # to avoid neg inf in log
-        OE = np.log(
-            OE
-        )  # log transform the OE to get equal-sized bins, as the expected values need to be log binned
-        # threshold elements based on M (TODO: decide on an adaptive threshold)
-        OE_filtered = np.where(OE > threshold, OE, 0)
-
-        # save OE and expected matrices in temp dir as .npy
-        np.save(f"{self.temp_dir}/OE_{resolution}.npy", OE_filtered)
-        np.save(f"{self.temp_dir}/E_{resolution}.npy", E)
 
     def sqrt_norm(self, matrix):
         """
@@ -455,11 +288,15 @@ class Process:
 
         return [x, i, k]
 
-# write main 
+
+# write main
 
 if __name__ == "__main__":
-    config = Config('GM12878', 1000000)
-    #want to check hic_geader function on the hic file mentioned in paths
-    query = Query(config)
-    inform = query.read_hic_header(config.paths.hic_file)
-    print(inform)
+    config = Config("GM12878", 1000)
+    # want to check hic_geader function on the hic file mentioned in paths
+    query = HiCQuery(config)
+    # check if hic file is readable
+    inform = query.read_hic_header(config.paths.hic_file); print(inform)
+    contacts = query.oe_intra(
+        config.genomic_params.chromosomes[0], config.paths.resolution
+    ); print(contacts[0:10])
