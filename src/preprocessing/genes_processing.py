@@ -17,9 +17,11 @@ def fetch_gene_ensemblAPI(ensembl_ids, batch_size=1000, ref_genome='hg38'):
     #add 'chr' in front of chrom number for convention standard whenever using ensemble 
     """
     Fetch details for multiple Ensembl IDs using api 
-    Parameters:
+    
+    Args:
         ensembl_ids (list): A list of Ensembl gene IDs (e.g., ENSG00000001497)
         batch_size (int): The number of IDs to query in each batch
+    
     Returns:
         DataFrame: A DataFrame containing 'id', 'biotype', 'chrom', 'Txstart', 'Txend', 'gene_name' for each gene
     """
@@ -60,11 +62,13 @@ def fetch_gene_gtf(gtf_file, ensembl_ids, ref_genome='hg38'):
     #the headers are named from GTF convention: universal function for all total RNA-seq data for hg38
     """
     Fetch gene details from a GTF file for a list of Ensembl IDs
-    Parameters:
+
+    Args:
         gtf_file (str): Path to the GTF file
         ensembl_ids (list): A list of Ensembl gene IDs (e.g., ENSG00000001497); 
         we don't input the version of the gene annotation (post decimal part of the ensembl id) as the gtf file can vary for different datasets
         assumption is that the gene details needed for this project (tss start and end) doen't vary much between gene annotation versions (only exons etc are updated)
+    
     Returns:
         pandas df: A DataFrame containing 'gene_id', 'gene_type', 'chrom', 'Txstart', 'Txend', 'gene_name' for each gene
     """
@@ -90,8 +94,10 @@ def processRNAseqData(infile, outfile, gtf_file, threshold=0.1, normalisation='l
     #the headers are custom to the current rna-seq data: specific function, switch headers according to input file
     """
     Read in raw total RNA-seq file for gene quantification, select a normalisation method and return the normalised data as gene_name and normalised and thresholded gene expression
-    Parameters:
+    
+    Args:
         infile (str): Path to the raw RNA-seq file
+    
     Returns:
         file csv; column headers: gene names and expressed gene expression values
     """
@@ -134,10 +140,12 @@ def processRNAseqData(infile, outfile, gtf_file, threshold=0.1, normalisation='l
 def assignBins2Genes(infile, bins_files, outfile, ref_genome='hg38'):
     """
     Read in the expressed gene list and assign chromosome locations to the gene TSSs, and gene body
-    Parameters:
+    
+    Args:
         infile (str): Path to the file containing gene list of expressed genes
         bin_files (dict): list of bin bed files (values) at multiple resolutions (keys) to get chr:start-end for each bin
         ref_genome (str): Reference genome to use (e.g., 'hg19', 'hg38', etc.)
+    
     Returns:
         file csv; column headers: gene_name, TSSBin_10kb: chrN:start, TSSBin_{other}, BodyBins_10kb: tuple of chrN:starts, BodyBins_{other}: tuple 
     """
@@ -192,10 +200,12 @@ def assignTSS2HiCBinID(infile, res0, bins_3D, ref_genome='hg38'):
     #TODO: debug for new gene list type and dataset
     """
     Reads a list of genes with bin starts defined at different resolutions and assigns the gene to bin_ID of the current resolution at the whole genome level
-    Parameters:
+    
+    Args:
         infile (str): Path to the file containing the gene list.
         resolution (str): The resolution key to use (e.g., '1kb', '5kb', etc.)
         bins (cooler dataFrame): bin_id in hic and its genomic location
+    
     Returns:
         dict: A dictionary mapping each gene to its bin identifier (int) to index the cooler matrix at a specific resolution
     """

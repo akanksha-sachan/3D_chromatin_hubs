@@ -1,5 +1,5 @@
 # config file for genomic hubs workflow
-
+# use scratch folder for loading data on the cluster
 
 class Config:
     """Main config class to store parameters and paths for the workflow"""
@@ -69,7 +69,8 @@ class Config:
         def initialize_bed_paths(self):
             """Initialize paths for indexing genomic sequences"""
             self.bins_file = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.resolution}/bins_{self.ref_genome}.bed"
-
+            self.chrom_sizes_file = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.ref_genome}.chrom.sizes"
+        
         def initialize_hic_paths(self):
             """Initialize paths for Hi-C data"""
             self.cool_file = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DN_dataportal_{self.ref_genome}/4DNFITRVKRPA.mcool"

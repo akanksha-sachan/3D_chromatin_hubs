@@ -49,6 +49,9 @@ class Query:
 class HiCQuery(Query):
     """
     Querying .hic files for observed and OE counts
+
+    Raises: 
+        ValueError: If queried resolution not found
     """
 
     def __init__(self, config):
@@ -80,7 +83,7 @@ class HiCQuery(Query):
         res = int(res)
         contacts_observed = hicstraw.straw(
             "observed", self.hic_norm, self.hic_file, chrom, chrom, "BP", res
-        )
+        ) #hicstraw object with bin.X bin.Y and counts as attrs of one row 
         return contacts_observed
 
     @profile
@@ -180,113 +183,6 @@ class Process:
         Pearson correlation coefficient between two matrices
         """
         return np.corrcoef(matrix)
-
-    def knight_ruiz_alg(self, A, tol=1e-8, f1=False):
-        """
-        Knight and Ruiz algorithm for matrix balancing
-        """
-        n = A.shape[0]
-        e = np.ones((n, 1), dtype=np.float64)
-        res = []
-
-        Delta = 3
-        delta = 0.1
-        x0 = np.copy(e)
-        g = 0.9
-
-        etamax = eta = 0.1
-        stop_tol = tol * 0.5
-        x = np.copy(x0)
-
-        rt = tol**2.0
-        v = x * (A.dot(x))
-        rk = 1.0 - v
-        rho_km1 = ((rk.transpose()).dot(rk))[0, 0]
-        rho_km2 = rho_km1
-        rout = rold = rho_km1
-
-        MVP = 0  # we'll count matrix vector products
-        i = 0  # outer iteration count
-
-        if f1:
-            print("it in. it res\n")
-        k = 0
-        while rout > rt:  # outer iteration
-            i += 1
-
-            if i > 30:
-                break
-
-            k = 0
-            y = np.copy(e)
-            innertol = max(eta**2.0 * rout, rt)
-
-            while rho_km1 > innertol:  # inner iteration by CG
-                k += 1
-                if k == 1:
-                    Z = rk / v
-                    p = np.copy(Z)
-                    rho_km1 = (rk.transpose()).dot(Z)
-                else:
-                    beta = rho_km1 / rho_km2
-                    p = Z + beta * p
-
-                if k > 10:
-                    break
-
-                w = x * A.dot(x * p) + v * p
-                alpha = rho_km1 / (((p.transpose()).dot(w))[0, 0])
-                ap = alpha * p
-                ynew = y + ap
-
-                if np.amin(ynew) <= delta:
-
-                    if delta == 0:
-                        break
-
-                    ind = np.where(ap < 0.0)[0]
-                    gamma = np.amin((delta - y[ind]) / ap[ind])
-                    y += gamma * ap
-                    break
-
-                if np.amax(ynew) >= Delta:
-                    ind = np.where(ynew > Delta)[0]
-                    gamma = np.amin((Delta - y[ind]) / ap[ind])
-                    y += gamma * ap
-                    break
-
-                y = np.copy(ynew)
-                rk -= alpha * w
-                rho_km2 = rho_km1
-                Z = rk / v
-                rho_km1 = ((rk.transpose()).dot(Z))[0, 0]
-            x *= y
-            v = x * (A.dot(x))
-            rk = 1.0 - v
-            rho_km1 = ((rk.transpose()).dot(rk))[0, 0]
-            rout = rho_km1
-            MVP += k + 1
-
-            rat = rout / rold
-            rold = rout
-            res_norm = rout**0.5
-            eta_o = eta
-            eta = g * rat
-            if g * eta_o**2.0 > 0.1:
-                eta = max(eta, g * eta_o**2.0)
-            eta = max(min(eta, etamax), stop_tol / res_norm)
-            if f1:
-                print(
-                    "{:03d} {:06d} {:.3f} {:.e} {:.e} \n".format(
-                        i, k, res_norm, rt, rout
-                    )
-                )
-                res.append(res_norm)
-        if f1:
-            output = "Matrix - vector products = %06i\n" % MVP
-            print(output)
-
-        return [x, i, k]
 
 
 # write main
