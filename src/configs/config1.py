@@ -1,4 +1,3 @@
-# config file for genomic hubs workflow
 # use scratch folder for loading data on the cluster
 
 class Config:
