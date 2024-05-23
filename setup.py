@@ -1,3 +1,7 @@
+"""
+for installation of package in editable mode
+"""
+
 from setuptools import setup, find_packages
 
 setup(
