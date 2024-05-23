@@ -21,7 +21,8 @@ from scipy.sparse import csr_matrix
 # add the parent directory of 'src' to the sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# relative and absolute imports for running module and script respectively
+# relative and absolute imports for running module and script respectively 
+#to test functions of this script inside this script itself, without NB
 try:
     from ..configs.config1 import Config
 except ImportError:
@@ -289,11 +290,11 @@ def insulation_score(m, windowsize=500000, res=10000):
 # write main
 
 if __name__ == "__main__":
-    config = Config("GM12878", 1000)
+    config = Config()
     # want to check hic_geader function on the hic file mentioned in paths
     query = HiCQuery(config)
     # check if hic file is readable
     inform = query.read_hic_header(config.paths.hic_file); print(inform)
     contacts = query.oe_intra(
-        config.genomic_params.chromosomes[0], config.paths.resolution
+        config.genomic_params.chromosomes[0], config.genomic_params.resolutions[0]
     ); print(contacts[0:10])
