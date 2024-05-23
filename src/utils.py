@@ -1,6 +1,4 @@
-"""
-Validation of interaction calls code, and other common utils
-"""
+"""Validation of interaction calls, and other common utils"""
 
 # pylint: disable=all
 import os

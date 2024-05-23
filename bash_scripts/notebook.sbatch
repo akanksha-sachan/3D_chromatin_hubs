@@ -5,7 +5,8 @@
 #SBATCH -w compute-4-26
 #SBATCH --time=1-00:00:00
 
-#Load CUDA
+# use scratch folder for loading data on the cluster
+# load CUDA
 module load cuda-12.2
 
 # --> uncomment to use conda environment with jupyter installed <---
@@ -30,7 +31,6 @@ echo -e "
     localhost:$ipnport  (prefix w/ https:// if using password)
     ------------------------------------------------------------------
     "
-
 
 # start an ipcluster instance and launch jupyter server
 jupyter-lab --NotebookApp.iopub_data_rate_limit=100000000000000 --no-browser --port=$ipnport --ip=$ipnip --NotebookApp.password='' --NotebookApp.token='' --notebook-dir=/work/magroup/asachan2/genomic_hubs

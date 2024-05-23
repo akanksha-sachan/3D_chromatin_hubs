@@ -1,5 +1,3 @@
-"""
-__init.py file
-"""
+"""__init.py file"""
 
 from .hub_analysis import *

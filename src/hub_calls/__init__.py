@@ -1,4 +1,3 @@
-# __init__.py for clustering of modules
-#sub-module: input is the data format storing nodes and weighted edges needed for clustering (identifying modules and not just connected components)
+"""_init.py"""
 
-from .module_finder import *
+from .hub_finder import *
