@@ -1,4 +1,7 @@
 ######### CONTACT MATRIX (.hic/.mcool) QUERYING for Observed and OE counts #########
+######### Calling loops, compartments and TADs #########
+######### Creating edge lists of local and global interactions for making graphs #########
+
 # pylint: disable=all
 # import io
 import json
@@ -9,20 +12,20 @@ import sys
 
 import cooler
 import hicstraw
-
-# import numba as njit
 import numpy as np
 from memory_profiler import profile
 from scipy.sparse import csr_matrix
+from sklearn.decomposition import PCA
 
 # parallel processing
 # import multiprocessing
+# import numba as njit
 
 # add the parent directory of 'src' to the sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# relative and absolute imports for running module and script respectively 
-#to test functions of this script inside this script itself, without NB
+# relative and absolute imports for running module and script respectively
+# to test functions of this script inside this script itself, without NB
 try:
     from ..configs.config1 import Config
 except ImportError:
@@ -51,7 +54,7 @@ class HiCQuery(Query):
     """
     Querying .hic files for observed and OE counts
 
-    Raises: 
+    Raises:
         ValueError: If queried resolution not found
     """
 
@@ -78,26 +81,45 @@ class HiCQuery(Query):
     @profile
     def observed_intra(self, chrom, res):
         """
-        Returns a list of intrachr contacts
+        returns csr sparse matrix of contact records for one chromosome
+        straw object : .binX [0] .binY [1] .counts [2] as attributes
         """
         chrom = chrom[3:]
         res = int(res)
-        contacts_observed = hicstraw.straw(
+        observed_list = hicstraw.straw(
             "observed", self.hic_norm, self.hic_file, chrom, chrom, "BP", res
-        ) #hicstraw object with bin.X bin.Y and counts as attrs of one row 
-        return contacts_observed
+        )
+        return observed_list
 
     @profile
     def oe_intra(self, chrom, res):
         """
-        Returns a list of intrachr contacts
+        returns csr sparse matrix of contact records for one chromosome
+        straw object : .binX [0] .binY [1] .counts [2] as attributes
         """
         chrom = chrom[3:]
         res = int(res)
-        contacts_oe = hicstraw.straw(
+        oe_list = hicstraw.straw(
             "oe", self.hic_norm, self.hic_file, chrom, chrom, "BP", res
         )
-        return contacts_oe
+        return oe_list
+    
+    @profile
+    def straw_to_csr(self, straw_obj, res):
+        """
+        Convert straw object to csr matrix
+        """
+        # convert to numpy
+        straw_array = np.array([(i.binX, i.binY, i.counts) for i in straw_obj],
+                               dtype=[('binX', np.int32), ('binY', np.int32), ('counts', np.float32)])
+
+        # use vectorized ops
+        row = straw_array['binX'] // res
+        col = straw_array['binY'] // res
+        value = straw_array['counts']
+        dimension = max(row.max(), col.max()) + 1
+        csr_mat = csr_matrix((value, (row, col)), shape=(dimension, dimension), dtype=float)
+        return csr_mat
 
     def read_null_terminated_string(self, binary_file) -> str:
         """
@@ -184,28 +206,22 @@ class Process:
         Pearson correlation coefficient between two matrices
         """
         return np.corrcoef(matrix)
-    
-###### 3D interaction calls part of code
-import os
-import sys
-import numpy as np
-import pandas as pd
-import cooler
-from sklearn.decomposition import PCA
+
 
 ##### 3D loop calls #####
+
 
 class HICCUPSLoops:
     """
     HICCUPS loop calls
     """
+
     def __init__(self, config):
         self.config = config
         self.temp_dir = config["temp_dir"]
         self.hiccups_dir = config["hiccups_dir"]
         if not os.path.exists(self.temp_dir):
             os.mkdir(self.temp_dir)
-        
 
     def juicer_hiccups(self, chrom):
         """
@@ -213,51 +229,78 @@ class HICCUPSLoops:
         """
         pass
 
-class PeakachuLoops:
-    """
-    Peakachu loop calls
-    """
-    def __init__(self, config):
-        self.config = config
-        self.temp_dir = config["temp_dir"]
-        self.peakachu_dir = config["peakachu_dir"]
-        if not os.path.exists(self.temp_dir):
-            os.mkdir(self.temp_dir)
-        
 
-    def call_loops(self, chrom):
-        """
-        Call loops using Peakachu wrapper
-        """
-        pass
+# class PeakachuLoops:
+#     """
+#     Peakachu loop calls
+#     """
+#     def __init__(self, config):
+#         self.config = config
+#         self.temp_dir = config["temp_dir"]
+#         self.peakachu_dir = config["peakachu_dir"]
+#         if not os.path.exists(self.temp_dir):
+#             os.mkdir(self.temp_dir)
 
-class LoadLoops:
-    """
-    Load pre-existing loops 
-    """
-    def __init__(self, config):
-        self.config = config
-        self.temp_dir = config["temp_dir"]
-        if not os.path.exists(self.temp_dir):
-            os.mkdir(self.temp_dir)
-        
 
-    def load_loops(self, chrom):
-        """
-        Load pre-existing loops
-        """
-        pass
+#     def call_loops(self, chrom):
+#         """
+#         Call loops using Peakachu wrapper
+#         """
+#         pass
+
 
 ##### 3D A/B compartment calls #####
+def get_oe_logtrans(matrix, threshold=1):
+    """
+    The O/E matrix is calculated as the log2 ratio of the raw contact matrix to the expected contact matrix.
+    The expected contact matrix is calculated by filling in the average value of the diagonals of the raw contact matrix.
+    Remove the NaN bins before calculating O/E so that interpolated edges aren't used
+    """
+    # process matrix to mask out the centeromeric bins (NANs currently)
+    matrix = np.nan_to_num(matrix)
+
+    # construct expected matrix
+    expected_matrix = np.zeros_like(matrix).astype(float)
+    l = len(matrix)
+    sums = []
+    for i in range(matrix.shape[0]):
+        contacts = np.diag(matrix, i)
+        # using on non zero diagonal elements to get the denominator
+        non_zero_indices = np.nonzero(contacts)[0]
+        if len(non_zero_indices) > 0:
+            # chr wide expected, not factorized by number of chrs for genome-wide comparison
+            expected_strength = contacts.sum() / len(non_zero_indices)
+
+        else:
+            expected_strength = 0
+        sums.append(expected_strength)
+        # uniform distribution of contacts across diagonals assumed
+        x_diag, y_diag = np.diag_indices(matrix.shape[0] - i)
+        x, y = x_diag, y_diag + i
+        expected_matrix[x, y] = expected_strength
+    expected_matrix += expected_matrix.T
+    eps = 1e-5
+    expected_matrix = np.nan_to_num(expected_matrix) + eps
+    obs_over_expected = matrix / expected_matrix
+    obs_over_expected[obs_over_expected == 0] = 1  # to avoid neg inf in log
+    obs_over_expected = np.log(
+        obs_over_expected
+    )  # log transform the OE to get equal-sized bins, as the expected values need to be log binned
+    # threshold elements based on M (TODO: decide on an adaptive threshold)
+    obs_over_expected_filtered = np.where(
+        obs_over_expected > threshold, obs_over_expected, 0
+    )
+    return obs_over_expected, obs_over_expected_filtered, expected_matrix, sums
+
 
 def get_ab_compartment(matrix):
     """
     Raw -> normalised -> O/E -> Pearson -> PCA gives A/B
     """
-    
-    #ensure diagonals are 1
+
+    # ensure diagonals are 1
     np.fill_diagonal(matrix, 1)
-    #get pearson matrix
+    # get pearson matrix
     matrix = np.corrcoef(matrix)
     np.fill_diagonal(matrix, 1)
     matrix[np.isnan(matrix)] = 0.0
@@ -265,7 +308,9 @@ def get_ab_compartment(matrix):
     y = pca.fit_transform(matrix)
     return y, pca
 
+
 ##### 3D insulation score #####
+
 
 def insulation_score(m, windowsize=500000, res=10000):
     """
@@ -275,17 +320,32 @@ def insulation_score(m, windowsize=500000, res=10000):
     m = np.nan_to_num(m)
     score = np.ones((m.shape[0]))
     for i in range(0, m.shape[0]):
-        with np.errstate(divide='ignore', invalid='ignore'):
-            v = np.sum(m[max(0, i - windowsize_bin): i, i + 1: min(m.shape[0] - 1, i + windowsize_bin + 1)]) / (np.sum(
-                 m[max(0, i - windowsize_bin):min(m.shape[0], i + windowsize_bin + 1),
-                   max(0, i - windowsize_bin):min(m.shape[0], i + windowsize_bin + 1)]))
+        with np.errstate(divide="ignore", invalid="ignore"):
+            v = np.sum(
+                m[
+                    max(0, i - windowsize_bin) : i,
+                    i + 1 : min(m.shape[0] - 1, i + windowsize_bin + 1),
+                ]
+            ) / (
+                np.sum(
+                    m[
+                        max(0, i - windowsize_bin) : min(
+                            m.shape[0], i + windowsize_bin + 1
+                        ),
+                        max(0, i - windowsize_bin) : min(
+                            m.shape[0], i + windowsize_bin + 1
+                        ),
+                    ]
+                )
+            )
             if np.isnan(v):
                 v = 1.0
         score[i] = v
-		#get log2 of the score
-		#score[score == 0] = 1
-		#score = np.log2(score)
+    # get log2 of the score
+    # score[score == 0] = 1
+    # score = np.log2(score)
     return score
+
 
 # write main
 
@@ -294,7 +354,11 @@ if __name__ == "__main__":
     # want to check hic_geader function on the hic file mentioned in paths
     query = HiCQuery(config)
     # check if hic file is readable
-    inform = query.read_hic_header(config.paths.hic_file); print(inform)
+    inform = query.read_hic_header(config.paths.hic_file)
+    print(inform)
     contacts = query.oe_intra(
-        config.genomic_params.chromosomes[0], config.genomic_params.resolutions[0]
-    ); print(contacts[0:10])
+        config.genomic_params.chromosomes[0], config.genomic_params.resolutions[1]
+    )
+    print(contacts[0:10])
+    sparse_matrix = query.straw_to_csr(contacts, config.genomic_params.resolutions[1])
+    print(sparse_matrix)
