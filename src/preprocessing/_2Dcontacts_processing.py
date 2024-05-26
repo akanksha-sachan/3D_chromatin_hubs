@@ -27,17 +27,15 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # relative and absolute imports for running module and script respectively
 # to test functions of this script inside this script itself, without NB
 try:
-    from ..configs.config1 import Config
+    from ..configs.config_local import Config
 except ImportError:
-    from configs.config1 import Config
-
-
-###### .mcool/.hic file querying, we know which format is the input  ######
+    from configs.config_local import Config
 
 
 class Query:
     """
     Base class for querying .mcool/.hic files for observed and OE counts
+    Store queried contacts as sparse csr matrices fro scalability of adding edges
     """
 
     def __init__(self, config):
@@ -103,22 +101,26 @@ class HiCQuery(Query):
             "oe", self.hic_norm, self.hic_file, chrom, chrom, "BP", res
         )
         return oe_list
-    
+
     @profile
     def straw_to_csr(self, straw_obj, res):
         """
         Convert straw object to csr matrix
         """
         # convert to numpy
-        straw_array = np.array([(i.binX, i.binY, i.counts) for i in straw_obj],
-                               dtype=[('binX', np.int32), ('binY', np.int32), ('counts', np.float32)])
+        straw_array = np.array(
+            [(i.binX, i.binY, i.counts) for i in straw_obj],
+            dtype=[("binX", np.int32), ("binY", np.int32), ("counts", np.float32)],
+        )
 
         # use vectorized ops
-        row = straw_array['binX'] // res
-        col = straw_array['binY'] // res
-        value = straw_array['counts']
+        row = straw_array["binX"] // res
+        col = straw_array["binY"] // res
+        value = straw_array["counts"]
         dimension = max(row.max(), col.max()) + 1
-        csr_mat = csr_matrix((value, (row, col)), shape=(dimension, dimension), dtype=float)
+        csr_mat = csr_matrix(
+            (value, (row, col)), shape=(dimension, dimension), dtype=float
+        )
         return csr_mat
 
     def read_null_terminated_string(self, binary_file) -> str:
@@ -177,79 +179,24 @@ class HiCQuery(Query):
         return hic_header
 
 
-class Process:
-    """
-    Post querying processing of observed/oe counts
-    """
-
-    def __init__(self, config):
-        self.config = config
-        self.temp_dir = config["temp_dir"]
-        self.resolutions = config["resolutions"]
-        if not os.path.exists(self.temp_dir):
-            os.mkdir(self.temp_dir)
-
-    def sqrt_norm(self, matrix):
-        """
-        Square root normalization of a matrix
-        """
-        coverage = np.sqrt(np.sum(matrix, axis=-1))
-        with np.errstate(divide="ignore", invalid="ignore"):
-            matrix = matrix / coverage.reshape((-1, 1))
-            matrix = matrix / coverage.reshape((1, -1))
-        matrix[np.isnan(matrix)] = 0.0
-        matrix[np.isinf(matrix)] = 0.0
-        return matrix
-
-    def pearson(self, matrix):
-        """
-        Pearson correlation coefficient between two matrices
-        """
-        return np.corrcoef(matrix)
-
-
-##### 3D loop calls #####
-
-
-class HICCUPSLoops:
-    """
-    HICCUPS loop calls
-    """
-
-    def __init__(self, config):
-        self.config = config
-        self.temp_dir = config["temp_dir"]
-        self.hiccups_dir = config["hiccups_dir"]
-        if not os.path.exists(self.temp_dir):
-            os.mkdir(self.temp_dir)
-
-    def juicer_hiccups(self, chrom):
-        """
-        Call loops using HICCUPS wrapper
-        """
-        pass
-
-
-# class PeakachuLoops:
+# class McoolQuery(Query):
 #     """
-#     Peakachu loop calls
+#     Querying .mcool files for observed and OE counts
+
+#     Raises:
+#         ValueError: If queried resolution not found
 #     """
+
 #     def __init__(self, config):
-#         self.config = config
-#         self.temp_dir = config["temp_dir"]
-#         self.peakachu_dir = config["peakachu_dir"]
-#         if not os.path.exists(self.temp_dir):
-#             os.mkdir(self.temp_dir)
-
-
-#     def call_loops(self, chrom):
-#         """
-#         Call loops using Peakachu wrapper
-#         """
-#         pass
+#         super().__init__(config)  # instantiate parent class
+#         self.mcool_file = config.paths.mcool_file  # path to .mcool file
+#         self.mcool = cooler.Cooler(self.mcool_file)  # cooler object from cooler
+#         print("Mcool file loaded")
 
 
 ##### 3D A/B compartment calls #####
+
+
 def get_oe_logtrans(matrix, threshold=1):
     """
     The O/E matrix is calculated as the log2 ratio of the raw contact matrix to the expected contact matrix.
@@ -261,7 +208,6 @@ def get_oe_logtrans(matrix, threshold=1):
 
     # construct expected matrix
     expected_matrix = np.zeros_like(matrix).astype(float)
-    l = len(matrix)
     sums = []
     for i in range(matrix.shape[0]):
         contacts = np.diag(matrix, i)
@@ -270,7 +216,6 @@ def get_oe_logtrans(matrix, threshold=1):
         if len(non_zero_indices) > 0:
             # chr wide expected, not factorized by number of chrs for genome-wide comparison
             expected_strength = contacts.sum() / len(non_zero_indices)
-
         else:
             expected_strength = 0
         sums.append(expected_strength)
@@ -297,7 +242,6 @@ def get_ab_compartment(matrix):
     """
     Raw -> normalised -> O/E -> Pearson -> PCA gives A/B
     """
-
     # ensure diagonals are 1
     np.fill_diagonal(matrix, 1)
     # get pearson matrix
@@ -305,9 +249,99 @@ def get_ab_compartment(matrix):
     np.fill_diagonal(matrix, 1)
     matrix[np.isnan(matrix)] = 0.0
     pca = PCA(n_components=1)
-    y = pca.fit_transform(matrix)
-    return y, pca
+    projected_matrix = pca.fit_transform(matrix)
+    return projected_matrix, pca
 
+
+##### 3D loop calls #####
+
+
+def run_hiccups(
+    hic_file,
+    output_dir,
+    juicer_path,
+    matrix_size=None,
+    chromosomes=None,
+    resolutions=None,
+    verbose=False,
+):
+    """
+    Runs the hiccups command from juicer_tools.
+
+    Parameters:
+    - hic_file: Path to the HiC file.
+    - output_dir: Directory where the output will be saved.
+    - juicer_path: Path to the juicer_tools jar file.
+    - matrix_size: Optional. Size of the matrix.
+    - chromosomes: Optional. List of chromosomes to include.
+    - resolutions: Optional. List of resolutions to use.
+    - verbose: Optional. If True, print additional output.
+    """
+    # Ensure the output directory exists
+    try:
+        os.stat(output_dir)
+    except:
+        os.mkdir(output_dir)
+
+    # strip chromosome list of the 'chr' prefix
+    if chromosomes:
+        chromosomes = [str(chrom[3:]) for chrom in chromosomes]
+
+    # Build the command
+    cmd = ["java", "-jar", juicer_path, "hiccups"]
+
+    if matrix_size:
+        cmd.extend(["-m", str(matrix_size)])
+
+    if chromosomes:
+        cmd.extend(["-c", ",".join(map(str, chromosomes))])
+
+    if resolutions:
+        cmd.extend(["-r", ",".join(map(str, resolutions))])
+
+    cmd.extend([hic_file, output_dir])
+
+    # Execute the command
+    if verbose:
+        print("Running command: " + " ".join(cmd))
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            if verbose:
+                print("Error in command execution:")
+                print(result.stderr)
+            raise subprocess.CalledProcessError(result.returncode, cmd)
+
+        if verbose:
+            print("Command output:")
+            print(result.stdout)
+
+        return result.stdout, result.stderr
+    except Exception as e:
+        if verbose:
+            print("Exception occurred while running the command:")
+            print(e)
+        raise
+
+
+# class PeakachuLoops:
+#     """
+#     Peakachu loop calls
+#     """
+#     def __init__(self, config):
+#         self.config = config
+#         self.temp_dir = config["temp_dir"]
+#         self.peakachu_dir = config["peakachu_dir"]
+#         if not os.path.exists(self.temp_dir):
+#             os.mkdir(self.temp_dir)
+
+
+#     def call_loops(self, chrom):
+#         """
+#         Call loops using Peakachu wrapper
+#         """
+#         pass
 
 ##### 3D insulation score #####
 
@@ -345,20 +379,3 @@ def insulation_score(m, windowsize=500000, res=10000):
     # score[score == 0] = 1
     # score = np.log2(score)
     return score
-
-
-# write main
-
-if __name__ == "__main__":
-    config = Config()
-    # want to check hic_geader function on the hic file mentioned in paths
-    query = HiCQuery(config)
-    # check if hic file is readable
-    inform = query.read_hic_header(config.paths.hic_file)
-    print(inform)
-    contacts = query.oe_intra(
-        config.genomic_params.chromosomes[0], config.genomic_params.resolutions[1]
-    )
-    print(contacts[0:10])
-    sparse_matrix = query.straw_to_csr(contacts, config.genomic_params.resolutions[1])
-    print(sparse_matrix)
