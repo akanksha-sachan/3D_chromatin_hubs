@@ -102,3 +102,6 @@ os.remove(TMP1 + ".success")
 os.remove(TMP1 + ".failure")
 os.remove(TMP2 + ".success")
 os.remove(TMP2 + ".failure")
+
+### example command
+### python liftOverBedpe.py --lift ./liftOver --chain hg19ToHg38.over.chain.gz --i GSE63525_replicate_hg19_HiCCUPS_looplist.bedpe --o GSE63525_replicate_hg38_HiCCUPS_looplist.bedpe --v T --h T
