@@ -25,7 +25,7 @@ setup(
     install_requires=[
         "numpy==1.26.2",
         "scipy==1.11.4",
-        "pandas==1.5.3",
+        "pandas>=1.5.3",
         "hic-straw==1.3.1",
         "cooler==0.9.3",
         "asciitree==0.3.3",
@@ -70,7 +70,7 @@ setup(
         "pairtools==1.0.3",
         "pathspec==0.12.1",
         "pexpect==4.9.0",
-        "pillow==10.1.0",
+        "pillow>=10.3.0",
         "pluggy==1.5.0",
         "prompt-toolkit==3.0.41",
         "pyarrow==14.0.1",

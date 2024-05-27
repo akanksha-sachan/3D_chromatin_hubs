@@ -101,17 +101,34 @@ class DataGenerator:
 
 
 class GraphGenerator:
-    def __init__(self, edges):
-        self.edges = edges
-        self.graph = self.make_graph()
+    def __init__(self, config):
+        self.local_edges = config.paths.edgelist[0] #pass edgelist of a specific nodeset
+        self.global_edges = config.paths.edgelist[1] #pass edgelist of a specific nodeset
 
-    def make_graph(self):
-        G = nx.Graph()
-        G.add_edges_from(self.edges)
-        return G
+    def assign_local_nodes_to_global(self):
+        """
+        Assign local nodes to global nodes based on overlapping loop anchors to O/E bins 
+        """
+        pass
 
-    def get_graph(self):
-        return self.graph
+    def distribute_global_edges(self):
+        """
+        Distribute global edges to small scale local nodes
+        """
+        pass
+
+    def normalize_edges(self):
+        """
+        Normalize edge weights between local and global edges
+        """
+        pass
+
+    def csr_to_nx_graph(self):
+        """
+        Convert a csr matrix to a networkx graph object for getting gexf for viz
+        """
+        pass
+
 
 
 class SpectralClustering:
@@ -134,6 +151,4 @@ class SpectralClustering:
         kmeans.fit(eigvecs[:, 1 : num_clusters + 1])
         return kmeans.labels_
 
-#class TraceMaximization:
 
-#class KernelKMeans:

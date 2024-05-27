@@ -10,7 +10,7 @@ try:
     from ..configs.config1 import Config
     from ..utils.helper import *
 except ImportError:
-    from configs.config1 import Config
+    from configs.config_local import Config
     from ..utils.helper import *
 
 class TestHelper(unittest.TestCase):

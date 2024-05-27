@@ -1,5 +1,5 @@
 """__init__.py file for making relative imports smoother"""
 
-from ._1Dchromatin_processing import *
-from ._2Dcontacts_processing import *
+from .open_chromatin_processing import *
+from .edgelist_creator import *
 from .genes_processing import *

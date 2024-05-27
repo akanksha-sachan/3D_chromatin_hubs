@@ -7,7 +7,7 @@ class Config:
     def __init__(self):
         self.genomic_params = self.genomic_params()
         self.paths = self.paths(self.genomic_params.cell_types[0], self.genomic_params.res_strs[0], self.genomic_params.ref_genome)
-
+    
     class genomic_params:
         """Nested class to store genomic parameters for the workflow"""
 
@@ -48,7 +48,7 @@ class Config:
             ]  # list of strings based on standard naming convention of chromosomes
 
     class paths:
-        """Nested class to store paths for the workflow"""
+        """Nested class to store input file paths"""
 
         def __init__(self, cell_type, res_str, ref_genome):
             self.cell_type = cell_type
@@ -57,7 +57,10 @@ class Config:
             self.initialize_rnaseq_paths()
             self.initialize_bed_paths()
             self.initialize_hic_paths()
+            self.initialize_tool_paths()
             self.initialize_temp_paths()
+            self.initialize_bedpe_paths()
+            self.initialize_hub_paths()
 
         def initialize_rnaseq_paths(self):
             """Initialize paths for RNA-seq data"""
@@ -68,16 +71,27 @@ class Config:
 
         def initialize_bed_paths(self):
             """Initialize paths for indexing genomic sequences"""
-            self.bins_file = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.res_str}/bins_{self.ref_genome}.bed"
-            self.chrom_sizes_file = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.ref_genome}.chrom.sizes"
-
+            self.ref_genome_bins_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.res_str}/bins_{self.ref_genome}.bed"
+            self.chrom_sizes_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.ref_genome}.chrom.sizes"
+            
         def initialize_hic_paths(self):
             """Initialize paths for Hi-C data"""
-            self.cool_file = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DN_dataportal_{self.ref_genome}/4DNFITRVKRPA.mcool"
-            self.hic_file = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DN_dataportal_{self.ref_genome}/4DNFI9YAVTI1.hic"
+            self.cool_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DN_dataportal_{self.ref_genome}/4DNFITRVKRPA.mcool"
+            self.hic_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DN_dataportal_{self.ref_genome}/4DNFI9YAVTI1.hic"
+        
+        def initialize_bedpe_paths(self):
+            """Initialize paths for Hi-C data inputs and edgelist outputs in bedpe format"""
+            self.hiccups_dir = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/loop_hiccups"
+            self.looplist_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DN_dataportal_hg38/replicate_hg19_HiCCUPS_looplist.txt"
+            
+        def initialize_tool_paths(self):
+            """Initialize paths for other tools used in pipeline"""
+            self.juicer_tools = "/Users/Akanksha/MaGroup/Genomic Hubs/workflow/juicer_tools/juicer_tools_1.19.02.jar"
 
         def initialize_temp_paths(self):
             """Initialize paths for temporary files"""
-            self.temp_dir = (
-                f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}"
-            )
+            self.temp_dir = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}"
+
+        def initialize_hub_paths(self):
+            """ nodesets of different resolutions stored in hdf5 format """
+            self.edgelist_outfile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/edgelist.h5"

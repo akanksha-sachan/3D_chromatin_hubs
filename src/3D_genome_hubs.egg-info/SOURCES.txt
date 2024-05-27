@@ -7,7 +7,7 @@ src/3D_genome_hubs.egg-info/entry_points.txt
 src/3D_genome_hubs.egg-info/requires.txt
 src/3D_genome_hubs.egg-info/top_level.txt
 src/configs/__init__.py
-src/configs/config1.py
+src/configs/config_local.py
 src/hub_calls/__init__.py
 src/hub_calls/hub_finder.py
 src/postprocessing/__init__.py
