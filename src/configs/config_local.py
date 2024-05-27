@@ -76,14 +76,15 @@ class Config:
             
         def initialize_hic_paths(self):
             """Initialize paths for Hi-C data"""
-            self.cool_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DN_dataportal_{self.ref_genome}/4DNFITRVKRPA.mcool"
-            self.hic_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DN_dataportal_{self.ref_genome}/4DNFI9YAVTI1.hic"
+            self.cool_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/4DNFITRVKRPA.mcool"
+            self.hic_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/4DNFI9YAVTI1.hic"
         
         def initialize_bedpe_paths(self):
             """Initialize paths for Hi-C data inputs and edgelist outputs in bedpe format"""
             self.hiccups_dir = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/loop_hiccups"
-            self.looplist_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DN_dataportal_hg38/replicate_hg19_HiCCUPS_looplist.txt"
-            
+            self.looplist_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/GSE63525_replicate_hg19_HiCCUPS_looplist.txt"
+            self.looplist_outfile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/GSE63525_replicate_hg19_HiCCUPS_looplist.bedpe"
+        
         def initialize_tool_paths(self):
             """Initialize paths for other tools used in pipeline"""
             self.juicer_tools = "/Users/Akanksha/MaGroup/Genomic Hubs/workflow/juicer_tools/juicer_tools_1.19.02.jar"

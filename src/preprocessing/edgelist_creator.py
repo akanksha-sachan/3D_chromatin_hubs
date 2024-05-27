@@ -216,13 +216,12 @@ class Compartment(Query):
     Class for calling A/B compartments from HiC data
     """
 
-    def __init__(self, config, oe_matrix, chrom, res):
+    def __init__(self, config, chrom, res):
         super().__init__(config)  # instantiate parent class
         self.current_chrom = (
             chrom  # current chromosome of which the oe matrix is loaded
         )
         self.current_res = res  # current resolution of the oe matrix
-        self.oe_csr_matrix = oe_matrix  # oe sparse matrix loaded
 
     def oe_from_cooler(obs_numpy_matrix, threshold=1):
         """
@@ -312,17 +311,17 @@ class Loop(Query):
     def __init__(self, config):
         super().__init__(config)  # instantiate parent class
         self.hiccups_dir = config.paths.hiccups_dir
-        self.hic_loop_file = config.paths.hic_loop_file
-        self.bedpe_outfile = config.paths.hic_bedpe
+        self.looplist_infile = config.paths.looplist_infile
+        self.looplist_outfile = config.paths.looplist_outfile
 
     def looplist_to_bedpe(self):
         """
-        Convert looplist.txt to bedpe format for visualization
+        Convert looplist.txt to bedpe format for visualization and comparison
         """
         import csv
 
         rows = []
-        with open(self.looplist_file, "r") as infile:
+        with open(self.looplist_infile, "r") as infile:
             reader = csv.reader(infile, delimiter="\t")
 
             # Skip the first line as it is a header
@@ -354,8 +353,7 @@ class Loop(Query):
                     row[16],
                     row[17],
                     row[18],
-                    row[19],
-                    row[20],
+                    row[19]
                 ]
                 rows.append(new_row)
 
@@ -363,7 +361,7 @@ class Loop(Query):
         rows.sort(key=lambda x: (x[0], int(x[1])))
 
         # Write the sorted rows to the output file
-        with open(self.looplist_bedpe, "w", newline="") as outfile:
+        with open(self.looplist_outfile, "w", newline="") as outfile:
             writer = csv.writer(outfile, delimiter="\t")
 
             # Write the BEDPE header
@@ -580,3 +578,5 @@ class ValidLoop(ValidContact):
 
 if __name__ == "__main__":
     config = Config()
+    loop = Loop(config)
+    loop.looplist_to_bedpe()
