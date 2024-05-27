@@ -13,6 +13,7 @@ import sys
 # import cooler
 import hicstraw
 import numpy as np
+import pandas as pd
 import pyBigWig
 from memory_profiler import profile
 from scipy.sparse import csr_matrix
@@ -31,6 +32,8 @@ try:
     from ..configs.config_local import Config
 except ImportError:
     from configs.config_local import Config
+
+############ Query Hic data and call 3D genomic features to create HDF5 edgelist object ############
 
 
 class Query:
@@ -131,7 +134,7 @@ class HiCQuery(Query):
             # hic_header["chromosomes"] = chroms
 
         return hic_header
-    
+
     @profile
     def observed_intra(self, chrom, res):
         """
@@ -158,12 +161,19 @@ class HiCQuery(Query):
         )
         return oe_list
 
-    def straw_to_bedpe(self, straw_obj, res):
+    def straw_to_pd(self, straw_obj):
         """
-        Convert straw object to bedpe format of chr:start:end chr:start:end and counts
+        Convert straw object to pandas dataframe
         """
-        
-        
+        # convert to numpy
+        straw_array = np.array(
+            [(i.binX, i.binY, i.counts) for i in straw_obj],
+            dtype=[("binX", np.int32), ("binY", np.int32), ("counts", np.float32)],
+        )
+        # convert to pandas
+        straw_df = pd.DataFrame(straw_array)
+        return straw_df
+
     @profile
     def straw_to_csr(self, straw_obj, res):
         """
@@ -201,9 +211,6 @@ class HiCQuery(Query):
 #         print("Mcool file loaded")
 
 
-##### 3D A/B compartment calls #####
-
-
 class Compartment(Query):
     """
     Class for calling A/B compartments from HiC data
@@ -216,7 +223,7 @@ class Compartment(Query):
         )
         self.current_res = res  # current resolution of the oe matrix
         self.oe_csr_matrix = oe_matrix  # oe sparse matrix loaded
-    
+
     def oe_from_cooler(obs_numpy_matrix, threshold=1):
         """
         The O/E matrix is calculated as the log2 ratio of the raw contact matrix to the expected contact matrix.
@@ -278,26 +285,23 @@ class Compartment(Query):
         projected_matrix = pca.fit_transform(matrix)
         return projected_matrix, pca
 
-
-    def e1_to_bigwig(bins, e1_values, chromsizes, output_file='e1.bw'):
+    def e1_to_bigwig(bins, e1_values, chromsizes, output_file="e1.bw"):
         """
         Save e1 as a bigwig track for one chr
         """
-        
-        e1_values = e1_values.flatten()
-        chroms = bins['chrom'].values
-        chroms = np.array([chroms[i].encode() for i in range(len(chroms))])
-        starts = bins['start'].values.astype(int)
-        ends = bins['end'].values.astype(int)
-        #adding chromsize header to bigwig file
-        bw = pyBigWig.open(output_file, "w")
-        bw.addHeader(list(chromsizes.items())) #dict of 'chr' and 'size'
-        #adding entries (bulk addition as each chroms, starts, ends, values can be numpy arrays)
-        bw.addEntries(chroms, starts, ends=ends, values=e1_values)  
-        bw.close()
-        print(f'BigWig file saved to {output_file}')
 
-##### 3D loop calls #####
+        e1_values = e1_values.flatten()
+        chroms = bins["chrom"].values
+        chroms = np.array([chroms[i].encode() for i in range(len(chroms))])
+        starts = bins["start"].values.astype(int)
+        ends = bins["end"].values.astype(int)
+        # adding chromsize header to bigwig file
+        bw = pyBigWig.open(output_file, "w")
+        bw.addHeader(list(chromsizes.items()))  # dict of 'chr' and 'size'
+        # adding entries (bulk addition as each chroms, starts, ends, values can be numpy arrays)
+        bw.addEntries(chroms, starts, ends=ends, values=e1_values)
+        bw.close()
+        print(f"BigWig file saved to {output_file}")
 
 
 class Loop(Query):
@@ -393,9 +397,6 @@ class Loop(Query):
             pass
 
 
-##### 3D insulation score #####
-
-
 class TAD(Query):
     """
     Class for insulation score calculation from HiC data
@@ -437,20 +438,33 @@ class TAD(Query):
         # score[score == 0] = 1
         # score = np.log2(score)
         return score
-    
-    def ins_to_bigwig(bins, ins_values, chromsizes, output_file='ins.bw'):
+
+    def ins_to_bigwig(bins, ins_values, chromsizes, output_file="ins.bw"):
         ins_values = ins_values.flatten()
-        chroms = bins['chrom'].values
+        chroms = bins["chrom"].values
         chroms = np.array([chroms[i].encode() for i in range(len(chroms))])
-        starts = bins['start'].values.astype(int)
-        ends = bins['end'].values.astype(int)
-        #adding chromsize header to bigwig file
+        starts = bins["start"].values.astype(int)
+        ends = bins["end"].values.astype(int)
+        # adding chromsize header to bigwig file
         bw = pyBigWig.open(output_file, "w")
-        bw.addHeader(list(chromsizes.items())) #dict of 'chr' and 'size'
-        #adding entries (bulk addition as each chroms, starts, ends, values can be numpy arrays)
-        bw.addEntries(chroms, starts, ends=ends, values=ins_values)  
+        bw.addHeader(list(chromsizes.items()))  # dict of 'chr' and 'size'
+        # adding entries (bulk addition as each chroms, starts, ends, values can be numpy arrays)
+        bw.addEntries(chroms, starts, ends=ends, values=ins_values)
         bw.close()
-        print(f'BigWig file saved to {output_file}')
+        print(f"BigWig file saved to {output_file}")
+
+
+class EdgelistCreator(Query):
+    """
+    Class for creating edge lists in .h5 format to store multi res multi chrom oe + loop interactions
+    Usage in creating csr graph objects in hub_caller script
+    """
+
+    def __init__(self, config):
+        super().__init__(config)  # instantiate parent class attributes
+
+
+############## Reliability of 3D genome feature calls #############
 
 
 class ValidContact:
@@ -462,6 +476,7 @@ class ValidContact:
         self.config = config
         self.temp_dir = config.paths.temp_dir  # should exist by this step
         self.res_list = config.genomic_params.resolutions
+
 
 class ValidCompartment(ValidContact):
     """
@@ -484,6 +499,7 @@ class ValidCompartment(ValidContact):
         Compare the compartment calls with reference databases using R2
         """
         pass
+
 
 class ValidLoop(ValidContact):
     """
@@ -543,23 +559,24 @@ class ValidLoop(ValidContact):
         return genomic_coords
 
     def get_loop_size(self, loops, res):
-         """
-         Get the 1-D genomic distance between loop anchor centroids a and b
-         """
-         dis = []
-         for chr in loops:
-             for s1, e1, s2, e2 in loops[chr]:
-                 a = (s1 + e1) // (2 * res)
-                 b = (s2 + e2) // (2 * res)
-                 #convert dist from bins to bp by multiplying with res
-                 dis.append((b-a)*res)
-         return dis
-    
+        """
+        Get the 1-D genomic distance between loop anchor centroids a and b
+        """
+        dis = []
+        for chr in loops:
+            for s1, e1, s2, e2 in loops[chr]:
+                a = (s1 + e1) // (2 * res)
+                b = (s2 + e2) // (2 * res)
+                # convert dist from bins to bp by multiplying with res
+                dis.append((b - a) * res)
+        return dis
+
     def overlap_loop_anchor(self):
         """
         Check for overlap between loop anchors within a threshold
         """
         pass
+
 
 if __name__ == "__main__":
     config = Config()
