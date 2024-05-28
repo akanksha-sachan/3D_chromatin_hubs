@@ -6,7 +6,7 @@ class Config:
 
     def __init__(self):
         self.genomic_params = self.genomic_params()
-        self.paths = self.paths(self.genomic_params.cell_types[0], self.genomic_params.res_strs[0], self.genomic_params.ref_genome)
+        self.paths = self.paths(self.genomic_params.cell_types[0])
     
     class genomic_params:
         """Nested class to store genomic parameters for the workflow"""
@@ -50,10 +50,8 @@ class Config:
     class paths:
         """Nested class to store input file paths"""
 
-        def __init__(self, cell_type, res_str, ref_genome):
+        def __init__(self, cell_type):
             self.cell_type = cell_type
-            self.res_str = res_str
-            self.ref_genome = ref_genome
             self.initialize_rnaseq_paths()
             self.initialize_bed_paths()
             self.initialize_hic_paths()
@@ -64,15 +62,15 @@ class Config:
 
         def initialize_rnaseq_paths(self):
             """Initialize paths for RNA-seq data"""
-            self.gtf_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/gencode.v45.basic.annotation.{self.ref_genome}.gtf"
+            self.gtf_infile = "/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/gencode.v45.basic.annotation.hg38.gtf"
             self.rnaseq_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/ENCODE_4/RNA_ENCSR820PHH/ENCFF345SHY_gene_quant.tsv"
-            self.expressed_genes_outfile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/expressed_genes_{self.ref_genome}_{self.cell_type}.txt"
-            self.gene_chrom_bin_num_outfile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/gene_chrom_bin_num_{self.ref_genome}_{self.cell_type}.txt"
+            self.expressed_genes_outfile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/expressed_genes_hg38_{self.cell_type}.txt"
+            self.gene_chrom_bin_num_outfile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/gene_chrom_bin_num_hg38_{self.cell_type}.txt"
 
         def initialize_bed_paths(self):
             """Initialize paths for indexing genomic sequences"""
-            self.ref_genome_bins_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.res_str}/bins_{self.ref_genome}.bed"
-            self.chrom_sizes_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.ref_genome}.chrom.sizes"
+            self.ref_genome_bins_infile = "/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/10kb/bins_hg38.bed"
+            self.chrom_sizes_infile = "/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/hg38.chrom.sizes"
             
         def initialize_hic_paths(self):
             """Initialize paths for Hi-C data"""
@@ -84,7 +82,7 @@ class Config:
             self.hiccups_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/loop_hiccups/merged_loops.bedpe"
             self.looplist_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/GSE63525_replicate_hg19_HiCCUPS_looplist.txt"
             self.looplist_outfile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/GSE63525_replicate_hg19_HiCCUPS_looplist.bedpe"
-        
+            self.geo_loops_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/GSE63525_replicate_hg38liftOver_HiCCUPS_10kb.bedpe"
         def initialize_tool_paths(self):
             """Initialize paths for other tools used in pipeline"""
             self.juicer_tools = "/Users/Akanksha/MaGroup/Genomic Hubs/workflow/juicer_tools/juicer_tools_1.19.02.jar"
