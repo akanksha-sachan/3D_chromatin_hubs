@@ -322,9 +322,10 @@ class Loop(Query):
 
     def __init__(self, config):
         super().__init__(config)  # instantiate parent class
-        self.hiccups_infile = config.paths.hiccups_infile
-        self.looplist_infile = config.paths.looplist_infile
-        self.looplist_outfile = config.paths.looplist_outfile
+        self.hiccups_merged_infile = config.paths.hiccups_merged_infile
+        self.loops_txt_infile = config.paths.loops_txt_infile
+        self.loops_bedpe_outfile = config.paths.loops_bedpe_outfile
+        self.geo_loops = config.paths.geo_loops_infile
 
     def looplist_to_bedpe(self):
         """
@@ -333,7 +334,7 @@ class Loop(Query):
         import csv
 
         rows = []
-        with open(self.looplist_infile, "r") as infile:
+        with open(self.loops_txt_infile, "r") as infile:
             reader = csv.reader(infile, delimiter="\t")
 
             # Skip the first line as it is a header
@@ -373,7 +374,7 @@ class Loop(Query):
         rows.sort(key=lambda x: (x[0], int(x[1])))
 
         # Write the sorted rows to the output file
-        with open(self.looplist_outfile, "w", newline="") as outfile:
+        with open(self.loops_bedpe_outfile, "w", newline="") as outfile:
             writer = csv.writer(outfile, delimiter="\t")
 
             # Write the BEDPE header
@@ -452,24 +453,25 @@ class Loop(Query):
             genomic_coords[chr] = sorted(genomic_coords[chr])
         return genomic_coords
 
-    def get_loop_size(self, loops, res):
+    def get_loop_size(self, loop_genomic_coords, res):
         """
         Get the 1-D genomic distance between loop anchor centroids a and b
         """
         dis = []
-        for chr in loops:
-            for s1, e1, s2, e2 in loops[chr]:
+        for chr in loop_genomic_coords:
+            for s1, e1, s2, e2 in loop_genomic_coords[chr]:
                 a = (s1 + e1) // (2 * res)
                 b = (s2 + e2) // (2 * res)
                 # convert dist from bins to bp by multiplying with res
                 dis.append((b - a) * res)
         return dis
 
-    def overlap_loop_anchor(self):
+    def loop_anchor_overlap_percent(self):
         """
-        Reliability: Check for overlap between loop anchors within a threshold
+        Reliability: Check for overlap between loop anchors within a 1-d dist threshold
         """
-        pass
+        ground_truth_loops = self.geo_loops
+        hiccups_loops = self.hiccups_merged_infile
 
 
 class TAD(Query):

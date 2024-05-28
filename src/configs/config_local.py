@@ -57,7 +57,7 @@ class Config:
             self.initialize_hic_paths()
             self.initialize_tool_paths()
             self.initialize_temp_paths()
-            self.initialize_bedpe_paths()
+            self.initialize_loops_paths()
             self.initialize_hub_paths()
 
         def initialize_rnaseq_paths(self):
@@ -77,12 +77,13 @@ class Config:
             self.cool_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/4DNFITRVKRPA.mcool"
             self.hic_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/4DNFI9YAVTI1.hic"
         
-        def initialize_bedpe_paths(self):
+        def initialize_loops_paths(self):
             """Initialize paths for Hi-C data inputs and edgelist outputs in bedpe format"""
-            self.hiccups_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/loop_hiccups/merged_loops.bedpe"
-            self.looplist_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/GSE63525_replicate_hg19_HiCCUPS_looplist.txt"
-            self.looplist_outfile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/GSE63525_replicate_hg19_HiCCUPS_looplist.bedpe"
+            self.hiccups_merged_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/loop_hiccups/merged_loops.bedpe"
+            self.loops_txt_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/GSE63525_replicate_hg19_HiCCUPS_looplist.txt"
+            self.loops_bedpe_outfile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/GSE63525_replicate_hg19_HiCCUPS_looplist.bedpe"
             self.geo_loops_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/GSE63525_replicate_hg38liftOver_HiCCUPS_10kb.bedpe"
+        
         def initialize_tool_paths(self):
             """Initialize paths for other tools used in pipeline"""
             self.juicer_tools = "/Users/Akanksha/MaGroup/Genomic Hubs/workflow/juicer_tools/juicer_tools_1.19.02.jar"
