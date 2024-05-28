@@ -15,12 +15,11 @@ import hicstraw
 import numpy as np
 import pandas as pd
 import pyBigWig
+from multiprocessing import Pool
 from memory_profiler import profile
 from scipy.sparse import csr_matrix
 from sklearn.decomposition import PCA
 
-# parallel processing
-# import multiprocessing
 # import numba as njit
 
 # add the parent directory of 'src' to the sys.path
@@ -39,7 +38,7 @@ except ImportError:
 class Query:
     """
     Base class for querying .mcool/.hic files for observed, OE counts, edges
-    Returns: all inherted classes return egdelist to build graph object with local and global interactions
+    Inherit: to return egdelist as hdf5 with local and global interactions
     """
 
     def __init__(self, config):
@@ -78,30 +77,14 @@ class HiCQuery(Query):
         Check if the resolution is present in the .hic file
         """
         available_resolutions = self.hic.getResolutions()
+        
         return all(res in available_resolutions for res in self.res_list)
 
-    def read_null_terminated_string(self, binary_file) -> str:
-        """
-        Read null terminated string from a binary file
-        """
-        string_buffer = ""
-        while True:
-            byte = binary_file.read(1)
-            if not byte:
-                # EOF (end of file) or read error
-                return string_buffer
-
-            decoded_byte = byte.decode("utf-8", "backslashreplace")
-            if decoded_byte == "\0":
-                # Null terminator found, end the string
-                return string_buffer
-
-            string_buffer += decoded_byte
-
-    def read_hic_header(self, hic_file):
+    def read_hic_header(self):
         """
         Read header of .hic file to get info
         """
+        hic_file = self.hic_file
         hic_header = {}
         with open(hic_file, "rb") as f:
             magic_string = struct.unpack("<3s", f.read(3))[0]
@@ -146,6 +129,7 @@ class HiCQuery(Query):
         observed_list = hicstraw.straw(
             "observed", self.hic_norm, self.hic_file, chrom, chrom, "BP", res
         )
+
         return observed_list
 
     @profile
@@ -159,26 +143,46 @@ class HiCQuery(Query):
         oe_list = hicstraw.straw(
             "oe", self.hic_norm, self.hic_file, chrom, chrom, "BP", res
         )
+
         return oe_list
 
-    def straw_to_pd(self, straw_obj):
-        """
-        Convert straw object to pandas dataframe
-        """
-        # convert to numpy
-        straw_array = np.array(
-            [(i.binX, i.binY, i.counts) for i in straw_obj],
-            dtype=[("binX", np.int32), ("binY", np.int32), ("counts", np.float32)],
-        )
-        # convert to pandas
-        straw_df = pd.DataFrame(straw_array)
-        return straw_df
-
     @profile
-    def straw_to_csr(self, straw_obj, res):
+    def oe_intra_df(self, chrom, res):
+        """
+        returns DataFrame of contact records for one chromosome
+        straw object : .binX [0] .binY [1] .counts [2] as attributes
+        """
+        oe_list = self.oe_intra(chrom, res)
+
+        # Preallocate lists using list comprehensions
+        x1 = [record.binX for record in oe_list]
+        x2 = [record.binX + res for record in oe_list]
+        y1 = [record.binY for record in oe_list]
+        y2 = [record.binY + res for record in oe_list]
+        counts = [record.counts for record in oe_list]
+        
+        # Use single value for chromosome columns
+        chr_column = [chrom] * len(oe_list)
+        
+        # Create DataFrame from lists
+        df = pd.DataFrame({
+            "chr1": chr_column,
+            "x1": x1,
+            "x2": x2,
+            "chr2": chr_column,
+            "y1": y1,
+            "y2": y2,
+            "counts": counts
+        })
+
+        return df
+    
+    @profile
+    def oe_straw_to_csr(self, chrom, res):
         """
         Convert straw object to csr matrix
         """
+        straw_obj = self.oe_intra(chrom, res)
         # convert to numpy
         straw_array = np.array(
             [(i.binX, i.binY, i.counts) for i in straw_obj],
@@ -193,6 +197,7 @@ class HiCQuery(Query):
         csr_mat = csr_matrix(
             (value, (row, col)), shape=(dimension, dimension), dtype=float
         )
+
         return csr_mat
 
 
@@ -531,7 +536,7 @@ class TAD(Query):
         print(f"BigWig file saved to {output_file}")
 
 
-class EdgelistCreator(Query):
+class EdgelistCreator(HiCQuery):
     """
     Class for creating edge lists in .h5 format to store multi res multi chrom oe + loop interactions
     Usage in creating csr graph objects in hub_caller script
@@ -539,9 +544,20 @@ class EdgelistCreator(Query):
 
     def __init__(self, config):
         super().__init__(config)  # instantiate parent class attributes
+    
+    def oe_specific_chrom_res(self, chrom, res, res_str):
+        contacts_oe = self.oe_intra(chrom, res) #get oe contacts as pandas df object
+        sparse_matrix_oe = self.straw_to_csr(contacts_oe, res)
+        sparse_matrix_path = os.path.join(self.config.paths.temp_dir, f"sparse_matrix_{chrom}_{res_str}.npz")
+        np.savez_compressed(sparse_matrix_path, data=sparse_matrix_oe.data, indices=sparse_matrix_oe.indices, indptr=sparse_matrix_oe.indptr, shape=sparse_matrix_oe.shape)
+        print(f"Sparse matrix saved at {sparse_matrix_path}")
 
 
 if __name__ == "__main__":
     config = Config()
-    loop = Loop(config)
-    loop.looplist_to_bedpe()
+    query = HiCQuery(config)
+    inform = query.read_hic_header(config.paths.hic_file)
+    print(inform)
+    query.process_all()
+    #loop = Loop(config)
+    #loop.looplist_to_bedpe()

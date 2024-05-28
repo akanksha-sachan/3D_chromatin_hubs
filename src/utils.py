@@ -47,11 +47,24 @@ def bedtools_makewindows(chromsizes_file, resolution, tmp_dir):
     else:
         print(f"Error creating bins file: {output_file}. Error: {process.stderr}")
 
-def bedpe_to_bed():
-        """
-        Convert bedpe to bed format for liftover utility
-        """
-        pass
+def read_null_terminated_string(binary_file) -> str:
+    """
+    Read null terminated string from a binary file
+    """
+    string_buffer = ""
+    while True:
+        byte = binary_file.read(1)
+        if not byte:
+            # EOF (end of file) or read error
+            return string_buffer
+
+        decoded_byte = byte.decode("utf-8", "backslashreplace")
+        if decoded_byte == "\0":
+            # Null terminator found, end the string
+            return string_buffer
+
+        string_buffer += decoded_byte
+
 
 def gen_coords_to_bin_index(gen_coords, res):
     """
