@@ -81,7 +81,7 @@ class Config:
         
         def initialize_bedpe_paths(self):
             """Initialize paths for Hi-C data inputs and edgelist outputs in bedpe format"""
-            self.hiccups_dir = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/loop_hiccups"
+            self.hiccups_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/loop_hiccups/merged_loops.bedpe"
             self.looplist_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/GSE63525_replicate_hg19_HiCCUPS_looplist.txt"
             self.looplist_outfile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/GSE63525_replicate_hg19_HiCCUPS_looplist.bedpe"
         

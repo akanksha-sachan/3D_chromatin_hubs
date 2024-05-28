@@ -13,7 +13,7 @@ import pandas as pd
 # add the parent directory of 'src' to the sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 try:
-    from ..configs.config_local import Config
+    from .configs.config_local import Config
 except ImportError:
     from configs.config_local import Config
 
