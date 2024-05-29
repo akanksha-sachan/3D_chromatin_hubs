@@ -17,6 +17,49 @@ try:
 except ImportError:
     from configs.config_local import Config
 
+def oe_from_cooler(obs_numpy_matrix, threshold=1):
+    """
+    The O/E matrix is calculated as the log2 ratio of the raw contact matrix to the expected contact matrix.
+    The expected contact matrix is calculated by filling in the average value of the diagonals of the raw contact matrix.
+    Remove the NaN bins before calculating O/E so that interpolated edges aren't used
+
+    Input: normalised observed counts as numpy matrix from cooler file
+    Output: O/E matrix, O/E matrix with thresholded values, expected matrix, sums of expected values
+    """
+
+    # process matrix to mask out the centeromeric bins (NANs currently)
+    matrix = np.nan_to_num(obs_numpy_matrix)
+
+    # construct expected matrix
+    expected_matrix = np.zeros_like(matrix).astype(float)
+    sums = []
+    for i in range(matrix.shape[0]):
+        contacts = np.diag(matrix, i)
+        # using on non zero diagonal elements to get the denominator
+        non_zero_indices = np.nonzero(contacts)[0]
+        if len(non_zero_indices) > 0:
+            # chr wide expected, not factorized by number of chrs for genome-wide comparison
+            expected_strength = contacts.sum() / len(non_zero_indices)
+        else:
+            expected_strength = 0
+        sums.append(expected_strength)
+            # uniform distribution of contacts across diagonals assumed
+        x_diag, y_diag = np.diag_indices(matrix.shape[0] - i)
+        x, y = x_diag, y_diag + i
+        expected_matrix[x, y] = expected_strength
+    expected_matrix += expected_matrix.T
+    eps = 1e-5
+    expected_matrix = np.nan_to_num(expected_matrix) + eps
+    obs_over_expected = matrix / expected_matrix
+    obs_over_expected[obs_over_expected == 0] = 1  # to avoid neg inf in log
+    obs_over_expected = np.log(
+                obs_over_expected
+            )  # log transform the OE to get equal-sized bins, as the expected values need to be log binned
+            # threshold elements based on M (TODO: decide on an adaptive threshold)
+    obs_over_expected_filtered = np.where(
+                obs_over_expected > threshold, obs_over_expected, 0
+            )
+    return obs_over_expected, obs_over_expected_filtered, expected_matrix, sums
 
 def bedtools_makewindows(chromsizes_file, resolution, tmp_dir):
     """runs this command: $ bedtools makewindows -g hg19.txt -w 1000000

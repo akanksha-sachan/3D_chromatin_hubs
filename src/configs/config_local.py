@@ -14,7 +14,7 @@ class Config:
         def __init__(self):
             self.cell_types = ["GM12878"]
             self.ref_genome = "hg38"  # used to read paths dynamically in config file
-            self.resolutions = [1000000, 1000]  # list of integers to query
+            self.resolutions = [1000000, 10000]  # list of integers to query
             self.res_strs = [
                 "1Mb",
                 "10kb",

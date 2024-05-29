@@ -2,4 +2,4 @@
 
 from .open_chromatin_processing import *
 from .hic_graph import *
-from .genes_processing import *
+from .genes_annotation import *
