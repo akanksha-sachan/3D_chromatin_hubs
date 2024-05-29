@@ -61,7 +61,7 @@ class HiCQuery(Query):
 
     def __init__(self, config):
         super().__init__(config)  # instantiate parent class
-        self.hic_file = config.paths.hic_file  # path to .hic file
+        self.hic_file = config.paths.hic_infile  # path to .hic file
         self.hic_norm = config.genomic_params.hic_norm  # normalization method to query
         self.hic = hicstraw.HiCFile(self.hic_file)  # hic object from straw
         print("HiC file loaded")
@@ -146,13 +146,16 @@ class HiCQuery(Query):
 
         return oe_list
 
+    def oe_intra_thresholded(self, chrom, res):
+        pass
+
     @profile
     def oe_intra_df(self, chrom, res):
         """
         returns DataFrame of contact records for one chromosome
         straw object : .binX [0] .binY [1] .counts [2] as attributes
         """
-        oe_list = self.oe_intra(chrom, res)
+        oe_list = self.oe_intra_thresholded(chrom, res)
 
         # Preallocate lists using list comprehensions
         x1 = [record.binX for record in oe_list]
@@ -174,6 +177,9 @@ class HiCQuery(Query):
             "y2": y2,
             "counts": counts
         })
+        # Sort the DataFrame by x1 (node1 starts)
+        df.sort_values(by="x1", inplace=True)
+        df.reset_index(drop=True, inplace=True)
 
         return df
     
@@ -556,8 +562,9 @@ class EdgelistCreator(HiCQuery):
 if __name__ == "__main__":
     config = Config()
     query = HiCQuery(config)
-    inform = query.read_hic_header(config.paths.hic_file)
-    print(inform)
-    query.process_all()
+    current_chrom = config.genomic_params.chromosomes[0]
+    current_res = config.genomic_params.resolutions[0]
+    pd_df = query.oe_intra_df(current_chrom, current_res)
+    print(pd_df.head)
     #loop = Loop(config)
     #loop.looplist_to_bedpe()

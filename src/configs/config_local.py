@@ -14,7 +14,7 @@ class Config:
         def __init__(self):
             self.cell_types = ["GM12878"]
             self.ref_genome = "hg38"  # used to read paths dynamically in config file
-            self.resolutions = [1000000, 10000]  # list of integers to query
+            self.resolutions = [1000000, 1000]  # list of integers to query
             self.res_strs = [
                 "1Mb",
                 "10kb",
@@ -59,6 +59,7 @@ class Config:
             self.initialize_temp_paths()
             self.initialize_loops_paths()
             self.initialize_hub_paths()
+            self.initialize_bigwig_paths()
 
         def initialize_rnaseq_paths(self):
             """Initialize paths for RNA-seq data"""
@@ -84,6 +85,10 @@ class Config:
             self.loops_bedpe_outfile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/GSE63525_replicate_hg19_HiCCUPS_looplist.bedpe"
             self.geo_loops_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/GSE63525_replicate_hg38liftOver_HiCCUPS_10kb.bedpe"
         
+        def initialize_bigwig_paths(self):
+            """Initialize paths for bigwigs"""
+            self.compartments_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/4DNFIDPK7WFE_compartments.bw"
+
         def initialize_tool_paths(self):
             """Initialize paths for other tools used in pipeline"""
             self.juicer_tools = "/Users/Akanksha/MaGroup/Genomic Hubs/workflow/juicer_tools/juicer_tools_1.19.02.jar"
