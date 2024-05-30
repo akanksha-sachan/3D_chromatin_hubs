@@ -1,6 +1,6 @@
 ######### CONTACT MATRIX (.hic/.mcool) -> EDGELIST (HDF5) of graph #########
 ######### Calling loops, compartments and TADs #########
-######### Creating edge lists of local and global interactions #########
+######### Creating edge lists of local and global interactions; plotting edge_reliabilities #########
 
 # pylint: disable=all
 
@@ -12,7 +12,7 @@ import sys
 from functools import partial
 from multiprocessing import Pool
 
-# import cooler
+import h5py
 import hicstraw
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,8 +21,6 @@ import pyBigWig
 from memory_profiler import profile
 from scipy.sparse import csr_matrix
 from sklearn.decomposition import PCA
-
-# import numba as njit
 
 # add the parent directory of 'src' to the sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -145,7 +143,7 @@ class HiCQuery(Query):
         return observed_list
 
     @profile
-    def oe_intra(self, threshold=None):
+    def oe_intra(self, threshold=0):
         """
         returns contact records for one chromosome as straw object, thresholded if needed
         straw object : .binX [0] .binY [1] .counts [2] as attributes of list
@@ -155,12 +153,12 @@ class HiCQuery(Query):
         oe_list = hicstraw.straw(
             "oe", self.hic_norm, self.hic_file, chrom, chrom, "BP", res
         )
-        if threshold is not None:
+        if threshold != 0:
             oe_list = [record for record in oe_list if record.counts >= threshold]
 
         return oe_list
 
-    def oe_intra_numpy(self, start, end, threshold=None):
+    def oe_intra_numpy(self, start, end, threshold=0):
         """
         Purpose: visualization of a slice of chromosomal OE matrix
         query OE as zoom data object from HiCFile class in straw
@@ -171,13 +169,13 @@ class HiCQuery(Query):
             chrom, chrom, "oe", self.hic_norm, "BP", self.res
         )
         oe_numpy = oe_mzd.getRecordsAsMatrix(start, end, start, end)
-        if threshold is not None:
+        if threshold != 0:
             oe_numpy_thresh = np.where(oe_numpy > threshold, oe_numpy, 0)
             return oe_numpy_thresh
         return oe_numpy
 
     @profile
-    def oe_intra_df(self, threshold=None):
+    def oe_intra_df(self, threshold=0):
         """
         returns DataFrame of contact records for one chromosome
         straw object : .binX [0] .binY [1] .counts [2] as attributes
@@ -218,7 +216,7 @@ class HiCQuery(Query):
         return df
 
     @profile
-    def oe_straw_to_csr(self, threshold=None):
+    def oe_straw_to_csr(self, threshold=0):
         """
         Convert straw object to csr matrix
         """
@@ -522,85 +520,90 @@ class HiCQuery(Query):
 #         print("Mcool file loaded")
 
 
-class EdgelistCreator(HiCQuery):
+class DataLoader(HiCQuery):
     """
-    Class for creating edge lists in .h5 format to store multi res multi chrom oe + loop interactions
-    Usage in creating csr graph objects in hub_caller script
+    Class for creating outputs for the data_loader script
+    Returns:
+    edgelists in .h5 format
+    plots for oe matrices (thresholded matrices, ab_scores, correlations)
     """
 
     def __init__(self, config, chrom, res, res_str):
         super().__init__(
             config, chrom, res, res_str
         )  # instantiate parent class attributes
-        self.outfile = config.paths.edgelist_outfile
+        self.edgelist_outfile = config.paths.edgelist_outfile
 
-    def oe_intra_edgelist(self):
+    def oe_intra_edgelist_single_chr(self, threshold=0, mode="a"):
         """Save pandas df oe edges in .h5 format"""
-        oe_intra_df = self.oe_intra_df() #pass threshold if needed
+        oe_intra_df = self.oe_intra_df(threshold)
+        thresh_str = str(threshold).replace(".", "_")
         oe_intra_df.to_hdf(
-            self.outfile,
-            key=f"{self.chrom}/_{self.res_str}/oe_intra",
-            mode="w",
+            self.edgelist_outfile,
+            key=f"{self.chrom}/_{self.res_str}/oe_intra_{thresh_str}",
+            mode=mode,
             format="table",
         )
 
+    def oe_plot_single_chr(
+        self, output_dir_oe_plot, start, end, threshold=0, cmap="bwr", vmin=0, vmax=1
+    ):
+        """save whole genome OE plots of a selected region and threshold"""
+        oe_numpy_thresholded = self.oe_intra_numpy(start, end, threshold)
+        filename = os.path.join(output_dir_oe_plot, f"{self.chrom}_oe_{threshold}.png")
+        region_str = format_loci_string(start, end, self.res_str)
+        plot_hic_map(
+            oe_numpy_thresholded,
+            cmap,
+            vmin,
+            vmax,
+            filename,
+            title=f"{self.chrom}:{region_str} OE",
+        )
 
-###### WHOLE GENOME METHODS ######
 
-def oe_plot_single_chr(
-    chrom, config, current_res, current_res_str, output_dir, start, end, threshold
+def whole_genome(
+    chrom, config, res, res_str, output_dir_oe_plot, start, end, threshold=0, mode="a"
 ):
-    """save whole genome OE plots of a selected region and threshold"""
-    query = HiCQuery(config, chrom, current_res, current_res_str)
-    oe_numpy_thresholded = query.oe_intra_numpy(start, end, threshold)
-    region_str = format_loci_string(start, end, current_res_str)
-    filename = os.path.join(
-        output_dir, f"{chrom}_{region_str}_oe_{threshold}.png"
-    )  # Filepath for saving the plot
+    """multiprocess methods to run on the whole genome"""
+    loader = DataLoader(config, chrom, res, res_str)
+    # loader.oe_plot_single_chr(output_dir_oe_plot, start, end, threshold) #can pass cmap, vmin, vmax
+    loader.oe_intra_edgelist(threshold, mode)
 
-    # Plot and save the map
-    plot_hic_map(
-        oe_numpy_thresholded, "bwr", 0, 1, filename, title=f"{chrom}:{region_str} OE"
-    )
-
-def oe_edgelist_single_chr(chrom, config, current_res, current_res_str):
-    """save whole genome OE edgelists with varying thresholds"""
-    EdgelistCreator(
-        config, chrom, current_res, current_res_str
-    ).oe_intra_edgelist() #instantiate edgelist object
-    read_current_h5 = pd.read_hdf(
-        config.paths.edgelist_outfile, key=f"{chrom}/_{current_res_str}/oe_intra"
-    )
-    print(read_current_h5)
 
 if __name__ == "__main__":
 
     # whole genome run test
     config = Config()
-    chromosomes = config.genomic_params.chromosomes
+    chromosomes = config.genomic_params.chromosomes[1:]
     current_res = config.genomic_params.resolutions[0]  # 1Mb for OE part
     current_res_str = config.genomic_params.res_strs[0]  # 1Mb for OE part
 
     # params for OE matrix visualisation
-    threshold = 0.5
+    threshold = 0  # tweak based on single chr viz
+    mode = "w"  # write .h5 for one chr, then append for others (default is append)
     start = 0
     end = 72000000
-    # Directory to save plots
-    output_dir = os.path.join(config.paths.temp_dir, f"oe_plots_{threshold}")
-    os.makedirs(output_dir, exist_ok=True)
 
-    # Custom colormap
+    # directory to save plots
+    output_dir_oe_plot = os.path.join(config.paths.temp_dir, f"oe_plots_{threshold}")
+    os.makedirs(output_dir_oe_plot, exist_ok=True)
+    # custom colormap
     REDMAP = LinearSegmentedColormap.from_list("bright_red", [(1, 1, 1), (1, 0, 0)])
 
-    # Multiprocessing for parallel processing
+    # write edgelist file for one chr
+    data_loader = DataLoader(config, chromosomes[0], current_res, current_res_str)
+    data_loader.oe_intra_edgelist_single_chr(threshold, mode)
+
+    # multiprocessing on whole genome
     with Pool() as pool:
         pool.map(
             partial(
-                oe_plot_single_chr,
+                whole_genome,
                 config=config,
-                current_res=current_res,
-                current_res_str=current_res_str,
-                output_dir=output_dir,
+                res=current_res,
+                res_str=current_res_str,
+                output_dir_oe_plot=output_dir_oe_plot,
                 start=start,
                 end=end,
                 threshold=threshold,
@@ -608,6 +611,6 @@ if __name__ == "__main__":
             chromosomes,
         )
 
-    print(f"All plots saved to {output_dir}")
-
-    
+    # print(f"All plots saved to {output_dir_oe_plot}")
+    # read .h5 object for inspection
+    inspect_h5_file(config.paths.edgelist_outfile)
