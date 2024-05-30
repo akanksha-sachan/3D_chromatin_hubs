@@ -10,6 +10,7 @@ import struct
 import subprocess
 import sys
 from multiprocessing import Pool
+from functools import partial
 
 # import cooler
 import hicstraw
@@ -17,6 +18,8 @@ import numpy as np
 import pandas as pd
 import pyBigWig
 from memory_profiler import profile
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 from scipy.sparse import csr_matrix
 from sklearn.decomposition import PCA
 
@@ -248,6 +251,8 @@ class HiCQuery(Query):
             Input: OE matrix
             Output: A/B compartment calls
             """
+
+            matrix = matrix.toarray()
             # ensure diagonals are 1
             np.fill_diagonal(matrix, 1)
             # get pearson matrix
@@ -537,19 +542,64 @@ class EdgelistCreator(HiCQuery):
         )
 
 
+###### whole genome test methods ######
+# Helper function for plotting
+def plot_hic_map(dense_matrix, cmap, vmin=0, vmax=30, filename=None):
+    d2 = dense_matrix
+    d2[np.isnan(d2)] = 0
+    d2[np.isinf(d2)] = 0
+    plt.matshow(dense_matrix, cmap=cmap, vmin=vmin, vmax=vmax)
+    if filename:
+        plt.savefig(filename)
+    plt.close()
+
+
+# Function to process each chromosome
+def process_one_chromosome_oe_plot(
+    chrom, config, current_res, current_res_str, output_dir
+):
+    query = HiCQuery(config, chrom, current_res, current_res_str)
+
+    # Specify region to visualize
+    start = 0
+    end = 72000000
+    oe_numpy_thresholded = query.oe_intra_numpy(start, end, threshold=0.5)
+
+    # Filepath for saving the plot
+    filename = os.path.join(output_dir, f"{chrom}_oe_threshold_plot.png")
+
+    # Plot and save the map
+    plot_hic_map(oe_numpy_thresholded, "bwr", 0, 1, filename)
+
+
 if __name__ == "__main__":
-    # pass 1 chr as input (run for all resolutions sperately as diff resolutions are required for diff parts)
+    # whole genome run test
     config = Config()
-    current_chrom = config.genomic_params.chromosomes[0]
+    chromosomes = config.genomic_params.chromosomes
     current_res = config.genomic_params.resolutions[0]  # 1Mb for OE part
     current_res_str = config.genomic_params.res_strs[0]  # 1Mb for OE part
 
-    query = HiCQuery(config, current_chrom, current_res, current_res_str)
-    oe_mzd = query.oe_intra_mzd()  # query thresholded matrix next
-    oe_mzd_thresholded = query.oe_intra_mzd(
-        threshold=0.1
-    )  # query thresholded matrix next
-    print(oe_mzd_thresholded)
+    # Directory to save plots
+    output_dir = os.path.join(config.paths.temp_dir, "oe_threshold_plots")
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Custom colormap
+    REDMAP = LinearSegmentedColormap.from_list("bright_red", [(1, 1, 1), (1, 0, 0)])
+
+    with Pool() as pool:
+        pool.map(
+            partial(
+                process_one_chromosome_oe_plot,
+                config=config,
+                current_res=current_res,
+                current_res_str=current_res_str,
+                output_dir=output_dir,
+            ),
+            chromosomes,
+        )
+
+    print(f"All plots saved to {output_dir}")
+
     # edge_list = EdgelistCreator(
     #     config, current_chrom, current_res, current_res_str
     # ).oe_intra_edgelist()
