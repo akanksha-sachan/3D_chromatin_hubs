@@ -143,8 +143,8 @@ class HiCQuery(Query):
     @profile
     def oe_intra(self):
         """
-        returns csr sparse matrix of contact records for one chromosome
-        straw object : .binX [0] .binY [1] .counts [2] as attributes
+        returns contact records for one chromosome as straw object
+        straw object : .binX [0] .binY [1] .counts [2] as attributes of list
         """
         chrom = self.chrom[3:]
         res = int(self.res)
@@ -154,8 +154,21 @@ class HiCQuery(Query):
 
         return oe_list
 
-    def oe_intra_thresholded(self):
-        pass
+    def oe_intra_numpy(self, start, end, threshold=None):
+        """
+        Purpose: visualization of a slice of chromosomal OE matrix
+        query matrix zoom data object from HiCFile class in straw
+        mzd object : get records of form .binX .binY counts
+        """
+        chrom = self.chrom[3:]
+        oe_mzd = self.hic.getMatrixZoomData(
+            chrom, chrom, "oe", self.hic_norm, "BP", self.res
+        )
+        oe_numpy = oe_mzd.getRecordsAsMatrix(start, end, start, end)
+        if threshold is not None:
+            oe_numpy_thresh = np.where(oe_numpy > threshold, oe_numpy, 0)
+            return oe_numpy_thresh
+        return oe_numpy
 
     @profile
     def oe_intra_df(self):
@@ -531,10 +544,16 @@ if __name__ == "__main__":
     current_res = config.genomic_params.resolutions[0]  # 1Mb for OE part
     current_res_str = config.genomic_params.res_strs[0]  # 1Mb for OE part
 
-    edge_list = EdgelistCreator(
-        config, current_chrom, current_res, current_res_str
-    ).oe_intra_edgelist()
-    read_current_h5 = pd.read_hdf(
-        config.paths.edgelist_outfile, key=f"{current_chrom}/_{current_res_str}/oe_intra"
-    )
-    print(read_current_h5)
+    query = HiCQuery(config, current_chrom, current_res, current_res_str)
+    oe_mzd = query.oe_intra_mzd()  # query thresholded matrix next
+    oe_mzd_thresholded = query.oe_intra_mzd(
+        threshold=0.1
+    )  # query thresholded matrix next
+    print(oe_mzd_thresholded)
+    # edge_list = EdgelistCreator(
+    #     config, current_chrom, current_res, current_res_str
+    # ).oe_intra_edgelist()
+    # read_current_h5 = pd.read_hdf(
+    #     config.paths.edgelist_outfile, key=f"{current_chrom}/_{current_res_str}/oe_intra"
+    # )
+    # print(read_current_h5)
