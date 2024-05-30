@@ -5,6 +5,8 @@ import os
 import subprocess
 import sys
 from collections import defaultdict
+from matplotlib.colors import LinearSegmentedColormap
+import matplotlib.pyplot as plt
 
 import numpy as np
 import pandas as pd
@@ -145,11 +147,30 @@ def standardize_chromosome(input_chrom, chrom_keys):
     # If no match found, return None or raise an error
     return None
 
+def format_loci_string(start, end, resolution_str):
+    if 'Mb' in resolution_str:
+        start_unit = start // 1_000_000
+        end_unit = end // 1_000_000
+        unit = 'Mb'
+    elif 'kb' in resolution_str:
+        start_unit = start // 1_000
+        end_unit = end // 1_000
+        unit = 'kb'
+    else:
+        start_unit = start
+        end_unit = end
+        unit = 'bp'
+    return f"{start_unit}-{end_unit}{unit}"
 
-# test function
-if __name__ == "__main__":
-    config = Config("GM12878", 10000)
-    chromsizes_file = config.paths.chrom_sizes_file
-    tmp_dir = config.paths.temp_dir
-    res = config.paths.resolution
+# Helper function for plotting
+def plot_hic_map(dense_matrix, cmap, vmin=0, vmax=30, filename=None, title=""):
+    d2 = dense_matrix
+    d2[np.isnan(d2)] = 0
+    d2[np.isinf(d2)] = 0
+    plt.matshow(dense_matrix, cmap=cmap, vmin=vmin, vmax=vmax)
+    plt.title(title)
+    if filename:
+        plt.savefig(filename)
+    plt.close()
+
     
