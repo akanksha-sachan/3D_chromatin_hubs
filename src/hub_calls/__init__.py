@@ -1,3 +1,3 @@
 """_init.py"""
 
-from .hub_caller import *
+from .graph_clustering import *

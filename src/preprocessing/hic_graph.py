@@ -9,13 +9,13 @@ import os
 import struct
 import subprocess
 import sys
+from multiprocessing import Pool
 
 # import cooler
 import hicstraw
 import numpy as np
 import pandas as pd
 import pyBigWig
-from multiprocessing import Pool
 from memory_profiler import profile
 from scipy.sparse import csr_matrix
 from sklearn.decomposition import PCA
@@ -47,8 +47,9 @@ class Query:
         if not os.path.exists(self.temp_dir):
             os.mkdir(self.temp_dir)
         self.chrom = chrom
-        self.res = res  
+        self.res = res
         self.res_str = res_str
+
 
 class HiCQuery(Query):
     """
@@ -65,8 +66,10 @@ class HiCQuery(Query):
         self.hic = hicstraw.HiCFile(self.hic_file)  # hic object from straw
         print("HiC file loaded")
 
-        #instantiate nested classes
-        self.ab_comp = self.ab_comp(config) #passing config if they need specifc attrs from there
+        # instantiate nested classes
+        self.ab_comp = self.ab_comp(
+            config
+        )  # passing config if they need specifc attrs from there
         self.loop = self.loop(config)
         self.tad = self.tad(config)
 
@@ -74,7 +77,7 @@ class HiCQuery(Query):
         self.res_list = config.genomic_params.resolutions
         if not self.resolutions_present():
             raise ValueError("Queried resolutions are not present in .hic file")
-        
+
         # TODO: add check for normalisation presence in .hic file
 
     def resolutions_present(self) -> bool:
@@ -82,7 +85,7 @@ class HiCQuery(Query):
         Check if the resolution is present in the .hic file
         """
         available_resolutions = self.hic.getResolutions()
-        
+
         return all(res in available_resolutions for res in self.res_list)
 
     def read_hic_header(self):
@@ -170,20 +173,22 @@ class HiCQuery(Query):
         y1 = [record.binY for record in oe_list]
         y2 = [record.binY + res for record in oe_list]
         counts = [record.counts for record in oe_list]
-        
+
         # Use single value for chromosome columns
         chr_column = [chrom] * len(oe_list)
-        
+
         # Create df from lists
-        df = pd.DataFrame({
-            "chr1": chr_column,
-            "x1": x1,
-            "x2": x2,
-            "chr2": chr_column,
-            "y1": y1,
-            "y2": y2,
-            "counts": counts
-        })
+        df = pd.DataFrame(
+            {
+                "chr1": chr_column,
+                "x1": x1,
+                "x2": x2,
+                "chr2": chr_column,
+                "y1": y1,
+                "y2": y2,
+                "counts": counts,
+            }
+        )
 
         # remove self-edges where x1 == y1 and x2 == y2
         df = df[(df["x1"] != df["y1"]) | (df["x2"] != df["y2"])]
@@ -192,7 +197,7 @@ class HiCQuery(Query):
         df.reset_index(drop=True, inplace=True)
 
         return df
-    
+
     @profile
     def oe_straw_to_csr(self):
         """
@@ -216,7 +221,7 @@ class HiCQuery(Query):
         )
 
         return csr_mat
-    
+
     class ab_comp:
         """Nested class for calling A/B compartments from .hic data and reliability checks"""
 
@@ -269,7 +274,7 @@ class HiCQuery(Query):
             Reliability: Compare the compartment calls with reference databases using R2
             """
             pass
-    
+
     class loop:
         """Nested class for analysis of loops from .hic data"""
 
@@ -318,7 +323,7 @@ class HiCQuery(Query):
                         row[16],
                         row[17],
                         row[18],
-                        row[19]
+                        row[19],
                     ]
                     rows.append(new_row)
 
@@ -424,10 +429,11 @@ class HiCQuery(Query):
             """
             ground_truth_loops = self.geo_loops
             hiccups_loops = self.hiccups_merged_infile
+
     class tad:
         """Nested class for insulation score calculation from .hic data"""
 
-        def __init__(self):
+        def __init__(self, config):
             pass
 
         def get_insulation_score(self, m, windowsize=500000, res=10000):
@@ -477,7 +483,8 @@ class HiCQuery(Query):
             bw.addEntries(chroms, starts, ends=ends, values=ins_values)
             bw.close()
             print(f"BigWig file saved to {output_file}")
-            
+
+
 # class McoolQuery(Query):
 #     """
 #     Querying .mcool files for observed and OE counts
@@ -486,11 +493,14 @@ class HiCQuery(Query):
 #         ValueError: If queried resolution not found
 #     """
 
+
 #     def __init__(self, config):
 #         super().__init__(config)  # instantiate parent class
 #         self.mcool_file = config.paths.mcool_file  # path to .mcool file
 #         self.mcool = cooler.Cooler(self.mcool_file)  # cooler object from cooler
 #         print("Mcool file loaded")
+
+
 class EdgelistCreator(HiCQuery):
     """
     Class for creating edge lists in .h5 format to store multi res multi chrom oe + loop interactions
@@ -498,24 +508,33 @@ class EdgelistCreator(HiCQuery):
     """
 
     def __init__(self, config, chrom, res, res_str):
-        super().__init__(config, chrom, res, res_str)  # instantiate parent class attributes
+        super().__init__(
+            config, chrom, res, res_str
+        )  # instantiate parent class attributes
         self.outfile = config.paths.edgelist_outfile
 
     def oe_intra_edgelist(self):
         """Save pandas df oe edges in .h5 format"""
         oe_intra_df = self.oe_intra_df()
-        oe_intra_df.to_hdf(self.outfile, key=f"{self.chrom}/{self.res_str}/oe_intra", mode='w', format='table')
-    
+        oe_intra_df.to_hdf(
+            self.outfile,
+            key=f"{self.chrom}/_{self.res_str}/oe_intra",
+            mode="w",
+            format="table",
+        )
 
 
 if __name__ == "__main__":
-    #pass 1 chr as input (run for all resolutions sperately as diff resolutions are required for diff parts)
+    # pass 1 chr as input (run for all resolutions sperately as diff resolutions are required for diff parts)
     config = Config()
     current_chrom = config.genomic_params.chromosomes[0]
-    current_res = config.genomic_params.resolutions[0] #1Mb for OE part
-    current_res_str = config.genomic_params.res_strs[0] #1Mb for OE part
+    current_res = config.genomic_params.resolutions[0]  # 1Mb for OE part
+    current_res_str = config.genomic_params.res_strs[0]  # 1Mb for OE part
 
-    edge_list = EdgelistCreator(config, current_chrom, current_res, current_res_str).oe_intra_edgelist()
-    read_current_h5 = pd.read_hdf(config.paths.edgelist_outfile, key=f"{current_chrom}/{current_res_str}/oe_intra")
+    edge_list = EdgelistCreator(
+        config, current_chrom, current_res, current_res_str
+    ).oe_intra_edgelist()
+    read_current_h5 = pd.read_hdf(
+        config.paths.edgelist_outfile, key=f"{current_chrom}/_{current_res_str}/oe_intra"
+    )
     print(read_current_h5)
-
