@@ -561,22 +561,22 @@ class DataLoader(HiCQuery):
 
 
 def whole_genome_edgelist(
-    chrom, config, res, res_str, threshold=0
+    chromosomes, config, res, res_str, threshold=0
 ):
     """
     multiprocess methods to run on the whole genome
     writing to .h5 using multiprocessing requires file locking
     """
-    loader = DataLoader(config, chrom, res, res_str)
-    #use for loop to write to .h5
-    loader.oe_intra_edgelist_single_chr(threshold)
+    for chrom in chromosomes:  #use for loop to write sequentially to .h5
+        loader = DataLoader(config, chrom, res, res_str)
+        loader.oe_intra_edgelist_single_chr(threshold)
 
 
 def whole_genome_oe_plot(
     chrom, config, res, res_str, output_dir_oe_plot, start, end, threshold=0
 ):
     """
-    multiprocess methods to run on the whole genome
+    multiprocess to run on the whole genome
     writing to .h5 using multiprocessing requires file locking
     """
     loader = DataLoader(config, chrom, res, res_str)
@@ -625,8 +625,8 @@ if __name__ == "__main__":
     data_loader = DataLoader(config, chromosomes[0], current_res, current_res_str)
     data_loader.oe_intra_edgelist_single_chr(threshold, mode)
 
-    #run parallel for remaining chromosomes
-    run_parallel_edgelist(config, chromosomes[1:], current_res, current_res_str, threshold)
+    #run for remaining chromosomes
+    whole_genome_edgelist(config, chromosomes[1:], current_res, current_res_str, threshold)
     
     #inspect .h5
-    #inspect_h5_file(config.paths.edgelist_outfile)
+    inspect_h5_file(config.paths.edgelist_outfile)
