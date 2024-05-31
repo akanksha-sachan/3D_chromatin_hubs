@@ -10,7 +10,7 @@ import struct
 import subprocess
 import sys
 from functools import partial
-from multiprocessing import Pool
+from multiprocessing import Pool, Lock, Manager
 
 import h5py
 import hicstraw
@@ -519,7 +519,8 @@ class HiCQuery(Query):
 #         self.mcool = cooler.Cooler(self.mcool_file)  # cooler object from cooler
 #         print("Mcool file loaded")
 
-
+# GLOBAL LOCK FOR WRITING TO HDF5 FILE
+lock = Lock()
 class DataLoader(HiCQuery):
     """
     Class for creating outputs for the data_loader script
@@ -538,12 +539,9 @@ class DataLoader(HiCQuery):
         """Save pandas df oe edges in .h5 format"""
         oe_intra_df = self.oe_intra_df(threshold)
         thresh_str = str(threshold).replace(".", "_")
-        oe_intra_df.to_hdf(
-            self.edgelist_outfile,
-            key=f"{self.chrom}/_{self.res_str}/oe_intra_{thresh_str}",
-            mode=mode,
-            format="table",
-        )
+        
+        with pd.HDFStore(self.edgelist_outfile, mode=mode) as store:
+            store.put(f"{self.chrom}/_{self.res_str}/oe_intra_{thresh_str}", oe_intra_df, format="table")
 
     def oe_plot_single_chr(
         self, output_dir_oe_plot, start, end, threshold=0, cmap="bwr", vmin=0, vmax=1
@@ -562,14 +560,46 @@ class DataLoader(HiCQuery):
         )
 
 
-def whole_genome(
-    chrom, config, res, res_str, output_dir_oe_plot, start, end, threshold=0, mode="a"
+def whole_genome_edgelist(
+    chrom, config, res, res_str, threshold=0
 ):
-    """multiprocess methods to run on the whole genome"""
+    """
+    multiprocess methods to run on the whole genome
+    writing to .h5 using multiprocessing requires file locking
+    """
     loader = DataLoader(config, chrom, res, res_str)
-    # loader.oe_plot_single_chr(output_dir_oe_plot, start, end, threshold) #can pass cmap, vmin, vmax
-    loader.oe_intra_edgelist(threshold, mode)
+    #use for loop to write to .h5
+    loader.oe_intra_edgelist_single_chr(threshold)
 
+
+def whole_genome_oe_plot(
+    chrom, config, res, res_str, output_dir_oe_plot, start, end, threshold=0
+):
+    """
+    multiprocess methods to run on the whole genome
+    writing to .h5 using multiprocessing requires file locking
+    """
+    loader = DataLoader(config, chrom, res, res_str)
+    loader.oe_plot_single_chr(output_dir_oe_plot, start, end, threshold) #can pass cmap, vmin, vmax
+
+def run_parallel_oe_plot(config, chromosomes, current_res, current_res_str, output_dir_oe_plot, start, end, threshold):
+    # multiprocessing on whole genome
+    with Pool() as pool:
+        pool.map(
+            partial(
+                whole_genome_oe_plot,
+                config=config,
+                res=current_res,
+                res_str=current_res_str,
+                output_dir_oe_plot=output_dir_oe_plot,
+                start=start,
+                end=end,
+                threshold=threshold,
+            ),
+            chromosomes,
+        )
+
+    print(f"All plots saved to {output_dir_oe_plot}")
 
 if __name__ == "__main__":
 
@@ -595,22 +625,8 @@ if __name__ == "__main__":
     data_loader = DataLoader(config, chromosomes[0], current_res, current_res_str)
     data_loader.oe_intra_edgelist_single_chr(threshold, mode)
 
-    # multiprocessing on whole genome
-    with Pool() as pool:
-        pool.map(
-            partial(
-                whole_genome,
-                config=config,
-                res=current_res,
-                res_str=current_res_str,
-                output_dir_oe_plot=output_dir_oe_plot,
-                start=start,
-                end=end,
-                threshold=threshold,
-            ),
-            chromosomes,
-        )
-
-    # print(f"All plots saved to {output_dir_oe_plot}")
-    # read .h5 object for inspection
-    inspect_h5_file(config.paths.edgelist_outfile)
+    #run parallel for remaining chromosomes
+    run_parallel_edgelist(config, chromosomes[1:], current_res, current_res_str, threshold)
+    
+    #inspect .h5
+    #inspect_h5_file(config.paths.edgelist_outfile)

@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 import pandas as pd
+import h5py
 
 # relative and absolute imports for running module and script respectively
 # add the parent directory of 'src' to the sys.path
@@ -172,5 +173,22 @@ def plot_hic_map(dense_matrix, cmap, vmin=0, vmax=30, filename=None, title=""):
     if filename:
         plt.savefig(filename)
     plt.close()
+
+def inspect_h5_file(file_path):
+    with h5py.File(file_path, 'r') as f:
+        def print_attrs(name, obj):
+            print(f"{name}: {dict(obj.attrs)}")
+
+        print("HDF5 file structure:")
+        f.visititems(print_attrs)
+
+        print("\nReading all datasets:")
+        for chrom in f.keys():
+            for res_str in f[chrom].keys():
+                for dataset in f[chrom][res_str].keys():
+                    key = f"{chrom}/{res_str}/{dataset}"
+                    data = pd.read_hdf(file_path, key=key)
+                    print(f"Data for {key}:")
+                    print(data.head())
 
     
