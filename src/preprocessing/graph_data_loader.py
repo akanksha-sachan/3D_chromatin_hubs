@@ -4,17 +4,13 @@
 
 # pylint: disable=all
 
-import json
 import os
 import struct
-import subprocess
 import sys
 from functools import partial
-from multiprocessing import Pool, Lock, Manager
+from multiprocessing import Pool
 
-import h5py
 import hicstraw
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pyBigWig
@@ -283,12 +279,14 @@ class HiCQuery(Query):
             print(f"BigWig file saved to {output_file}")
 
         def get_ab_bigwig(self):
+            #TODO (present in jupyter NB)
             """
             Get the PCA score for the compartment calls
             """
             pass
 
         def ab_score_correlation(self):
+            #TODO
             """
             Reliability: Compare the compartment calls with reference databases using R2
             """
@@ -443,6 +441,7 @@ class HiCQuery(Query):
             return dis
 
         def loop_anchor_overlap_percent(self):
+            #TODO
             """
             Reliability: Check for overlap between loop anchors within a 1-d dist threshold
             """
@@ -519,8 +518,6 @@ class HiCQuery(Query):
 #         self.mcool = cooler.Cooler(self.mcool_file)  # cooler object from cooler
 #         print("Mcool file loaded")
 
-# GLOBAL LOCK FOR WRITING TO HDF5 FILE
-lock = Lock()
 class DataLoader(HiCQuery):
     """
     Class for creating outputs for the data_loader script
@@ -560,9 +557,7 @@ class DataLoader(HiCQuery):
         )
 
 
-def whole_genome_edgelist(
-    chromosomes, config, res, res_str, threshold=0
-):
+def whole_genome_edgelist(config, chromosomes, res, res_str, threshold=0):
     """
     multiprocess methods to run on the whole genome
     writing to .h5 using multiprocessing requires file locking
@@ -611,7 +606,7 @@ if __name__ == "__main__":
 
     # params for OE matrix visualisation
     threshold = 0  # tweak based on single chr viz
-    mode = "w"  # write .h5 for one chr, then append for others (default is append)
+    #mode = "w"  # write .h5 for one chr, then append for others (default is append)
     start = 0
     end = 72000000
 
@@ -621,12 +616,8 @@ if __name__ == "__main__":
     # custom colormap
     REDMAP = LinearSegmentedColormap.from_list("bright_red", [(1, 1, 1), (1, 0, 0)])
 
-    # write edgelist file for one chr
-    data_loader = DataLoader(config, chromosomes[0], current_res, current_res_str)
-    data_loader.oe_intra_edgelist_single_chr(threshold, mode)
-
-    #run for remaining chromosomes
-    whole_genome_edgelist(config, chromosomes[1:], current_res, current_res_str, threshold)
+    #write edgelist file for whole genome
+    whole_genome_edgelist(config, chromosomes, current_res, current_res_str, threshold)
     
     #inspect .h5
     inspect_h5_file(config.paths.edgelist_outfile)
