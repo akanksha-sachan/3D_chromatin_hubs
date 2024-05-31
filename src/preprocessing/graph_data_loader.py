@@ -606,7 +606,6 @@ if __name__ == "__main__":
 
     # params for OE matrix visualisation
     threshold = 0  # tweak based on single chr viz
-    #mode = "w"  # write .h5 for one chr, then append for others (default is append)
     start = 0
     end = 72000000
 
