@@ -600,7 +600,7 @@ if __name__ == "__main__":
 
     # whole genome run test
     config = Config()
-    chromosomes = config.genomic_params.chromosomes[1:]
+    chromosomes = config.genomic_params.chromosomes
     current_res = config.genomic_params.resolutions[0]  # 1Mb for OE part
     current_res_str = config.genomic_params.res_strs[0]  # 1Mb for OE part
 
@@ -618,5 +618,4 @@ if __name__ == "__main__":
     #write edgelist file for whole genome
     whole_genome_edgelist(config, chromosomes, current_res, current_res_str, threshold)
     
-    #inspect .h5
-    inspect_h5_file(config.paths.edgelist_outfile)
+    
