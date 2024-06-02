@@ -2,6 +2,8 @@
 ######### Calling loops, compartments and TADs #########
 ######### Creating edge lists of local and global interactions; plotting edge_reliabilities #########
 
+##TODO: fix variables from chrom 2 currents
+
 # pylint: disable=all
 
 import os

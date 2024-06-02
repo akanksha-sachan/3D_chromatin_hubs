@@ -6,7 +6,7 @@ class Config:
 
     def __init__(self):
         self.genomic_params = self.genomic_params()
-        self.paths = self.paths(self.genomic_params.cell_types[0])
+        self.paths = self.paths(self.genomic_params.cell_types[0], self.genomic_params.res_strs[0])
     
     class genomic_params:
         """Nested class to store genomic parameters for the workflow"""
@@ -50,8 +50,9 @@ class Config:
     class paths:
         """Nested class to store input file paths"""
 
-        def __init__(self, cell_type):
+        def __init__(self, cell_type, res_str):
             self.cell_type = cell_type
+            self.res_str = res_str
             self.initialize_rnaseq_paths()
             self.initialize_bed_paths()
             self.initialize_hic_paths()
@@ -70,7 +71,7 @@ class Config:
 
         def initialize_bed_paths(self):
             """Initialize paths for indexing genomic sequences"""
-            self.ref_genome_bins_infile = "/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/10kb/bins_hg38.bed"
+            self.ref_genome_bins_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.res_str}/bins_hg38.bed"
             self.chrom_sizes_infile = "/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/hg38.chrom.sizes"
             
         def initialize_hic_paths(self):

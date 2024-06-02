@@ -7,7 +7,6 @@ import sys
 from functools import partial
 from multiprocessing import Pool
 
-import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 import networkx as nx
@@ -30,29 +29,31 @@ except ImportError:
 #graph constructor class
 class Graph:
     """building csr matrix graph data object from h5 edglelist file"""
-    def __init__(self, config, current_chrom, current_res_str):
-        self.edgelist_h5 = config.paths.edgelist_outfile #infile from dataloader
-        self.chrom_group = current_chrom #current chrom to build graph for
-        self.res_str_key = current_res_str #key for getting resolution specific edgelist
+    def __init__(self, config, current_chrom, current_res_str, nodeset_key='oe_intra_0'):
+        self.edgelist_h5_infile = config.paths.edgelist_outfile #outfile from dataloader
+        self.query_group_chrom = current_chrom #current chrom to build graph for
+        self.query_subgroup_res = f'_{current_res_str}' 
+        self.query_key_edge = nodeset_key
  
-        self.graph_edge_df = None #extracted df for quick access
-        self.node_loci = None #genomic loci kept for nodes for analysis
-        self.node_indices = None #idx mapped from df rows to csr rows
-        self.graph_csr = None #graph matrix
-        self.love = None 
+        self.edge_df = None #extracted df for quick access
+        self.node_idx_loci = None #idx mapped from df rows to csr rows, dict: {idx: chrN:start} for each node
+        self.csr_matrix = None #graph matrix
 
     def load_edges(self):
-        """extract the pandas dataframe from the h5 file"""
-        with h5py.File(self.edgelist_h5, 'r') as f:
-            self.edgelist_df = f[self.chrom_group][self.res_str_key][:]
+        """extract pandas dataframe dataset for building graph from h5"""
+        dataset_path = f'{self.query_group_chrom}/{self.query_subgroup_res}/{self.query_key_edge}'
+        with pd.HDFStore(self.edgelist_h5_infile, mode='r') as store:
+            self.edge_df = store[dataset_path]
     
-    def df_to_csr(self):
-        """convert the edgelist dataframe to a CSR matrix."""
-        nodes = pd.unique(self.graph_edge_df[['x1', 'y1']].values.ravel('K'))
-        self.node_indices = {node: idx for idx, node in enumerate(nodes)}
-        rows = self.edgelist_df['x1'].map(self.node_indices) #mapping csr row idx to df row idx of bin starts
-        cols = self.edgelist_df['y1'].map(self.node_indices) #mapping csr row idx to df row idx of bin starts
-        weights = self.edgelist_df['counts'].values
+    def df_to_affinity_csr(self):
+        """convert edgelist pandas df graph to a CSR matrix graph (affinity matrix) for clustering"""
+        nodes = pd.unique(self.edge_df[['x1', 'y1']].values.ravel('K')) 
+        #TODO: match with number of bins in the chrom
+
+        self.node_idx_loci = {idx: start for idx, start in enumerate(nodes)} #save in format idx: chrN:start 
+        rows = self.edge_df['x1'].map(self.node_idx_loci) #mapping csr row idx to df row idx of bin starts
+        cols = self.edge_df['y1'].map(self.node_idx_loci) #mapping csr row idx to df row idx of bin starts
+        weights = self.edge_df['counts'].values
         num_nodes = len(nodes)
         self.csr_matrix = csr_matrix((weights, (rows, cols)), shape=(num_nodes, num_nodes))
 
@@ -102,4 +103,7 @@ class Cluster(Graph):
 if __name__ == "__main__":
 
     config = Config()
-    inspect_h5_file(config.paths.edgelist_outfile)
+    #inspect_h5_file(config.paths.edgelist_outfile) #utils func
+    graph = Graph(config, config.genomic_params.chromosomes[0], config.genomic_params.res_strs[0])
+    graph.load_edges()
+    graph.df_to_csr()

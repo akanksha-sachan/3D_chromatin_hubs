@@ -4,5 +4,5 @@
 from .utils import *
 from .configs import *
 from .preprocessing import *
-from .hub_calls import *
+from .module_detection import *
 from .postprocessing import *
