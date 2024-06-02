@@ -20,6 +20,7 @@ try:
 except ImportError:
     from configs.config_local import Config
 
+
 def oe_from_cooler(obs_numpy_matrix, threshold=1):
     """
     The O/E matrix is calculated as the log2 ratio of the raw contact matrix to the expected contact matrix.
@@ -46,7 +47,7 @@ def oe_from_cooler(obs_numpy_matrix, threshold=1):
         else:
             expected_strength = 0
         sums.append(expected_strength)
-            # uniform distribution of contacts across diagonals assumed
+        # uniform distribution of contacts across diagonals assumed
         x_diag, y_diag = np.diag_indices(matrix.shape[0] - i)
         x, y = x_diag, y_diag + i
         expected_matrix[x, y] = expected_strength
@@ -56,42 +57,35 @@ def oe_from_cooler(obs_numpy_matrix, threshold=1):
     obs_over_expected = matrix / expected_matrix
     obs_over_expected[obs_over_expected == 0] = 1  # to avoid neg inf in log
     obs_over_expected = np.log(
-                obs_over_expected
-            )  # log transform the OE to get equal-sized bins, as the expected values need to be log binned
-            # threshold elements based on M (TODO: decide on an adaptive threshold)
+        obs_over_expected
+    )  # log transform the OE to get equal-sized bins, as the expected values need to be log binned
+    # threshold elements based on M (TODO: decide on an adaptive threshold)
     obs_over_expected_filtered = np.where(
-                obs_over_expected > threshold, obs_over_expected, 0
-            )
+        obs_over_expected > threshold, obs_over_expected, 0
+    )
     return obs_over_expected, obs_over_expected_filtered, expected_matrix, sums
 
-def bedtools_makewindows(chromsizes_file, resolution, tmp_dir):
+
+def bedtools_makewindows(chromsizes_file, res, outfile):
     """runs this command: $ bedtools makewindows -g hg19.txt -w 1000000
     can add additional if statements to be able to run -b input.bed and -n 10 command
     """
 
-    # create sub-directory for resoltuion/window sizes
-    resolution_dir = os.path.join(tmp_dir, str(resolution))
-    if not os.path.exists(resolution_dir):
-        os.makedirs(resolution_dir)
-
-    # extract name of output file from chromsizes_file (example: bins_hg19.bed)
-    output_file = f'bins_{os.path.basename(chromsizes_file).split(".")[0]}.bed'
-    output_path = os.path.join(resolution_dir, output_file)
-
     # Construct the bedtools command
-    cmd = f'bedtools makewindows -g "{chromsizes_file}" -w {resolution}'
+    cmd = f'bedtools makewindows -g "{chromsizes_file}" -w {res}'
 
     # Run the command and redirect output to a file
-    with open(output_path, "w") as file:
+    with open(outfile, "w") as file:
         process = subprocess.run(
             cmd, shell=True, stdout=file, stderr=subprocess.PIPE, text=True
         )
 
     # Handle command output
     if process.returncode == 0:
-        print(f"Successfully created bins file: {output_path}")
+        print(f"Successfully created bins file: {outfile}")
     else:
-        print(f"Error creating bins file: {output_file}. Error: {process.stderr}")
+        print(f"Error creating bins file: {outfile}. Error: {process.stderr}")
+
 
 def read_null_terminated_string(binary_file) -> str:
     """
@@ -148,20 +142,22 @@ def standardize_chromosome(input_chrom, chrom_keys):
     # If no match found, return None or raise an error
     return None
 
+
 def format_loci_string(start, end, resolution_str):
-    if 'Mb' in resolution_str:
+    if "Mb" in resolution_str:
         start_unit = start // 1_000_000
         end_unit = end // 1_000_000
-        unit = 'Mb'
-    elif 'kb' in resolution_str:
+        unit = "Mb"
+    elif "kb" in resolution_str:
         start_unit = start // 1_000
         end_unit = end // 1_000
-        unit = 'kb'
+        unit = "kb"
     else:
         start_unit = start
         end_unit = end
-        unit = 'bp'
+        unit = "bp"
     return f"{start_unit}-{end_unit}{unit}"
+
 
 # Helper function for plotting
 def plot_hic_map(dense_matrix, cmap, vmin=0, vmax=30, filename=None, title=""):
@@ -174,8 +170,10 @@ def plot_hic_map(dense_matrix, cmap, vmin=0, vmax=30, filename=None, title=""):
         plt.savefig(filename)
     plt.close()
 
+
 def inspect_h5_file(file_path):
-    with h5py.File(file_path, 'r') as f:
+    with h5py.File(file_path, "r") as f:
+
         def print_attrs(name, obj):
             print(f"{name}: {dict(obj.attrs)}")
 
@@ -191,4 +189,9 @@ def inspect_h5_file(file_path):
                     print(f"Data for {key}:")
                     print(data.head())
 
-    
+
+if __name__ == "__main__":
+    config = Config()
+    bedtools_makewindows(
+        config.paths.chrom_sizes_infile, 1000000, config.paths.ref_genome_bins
+    )

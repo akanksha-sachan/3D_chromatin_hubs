@@ -1,18 +1,18 @@
 """config file to specify params for runs"""
-
+#set cell type and resolution to load files from 
 
 class Config:
     """Main config class to store parameters and paths for the workflow"""
 
     def __init__(self):
         self.genomic_params = self.genomic_params()
-        self.paths = self.paths(self.genomic_params.cell_types[0], self.genomic_params.res_strs[0])
+        self.paths = self.paths(self.genomic_params.cell_types[0], self.genomic_params.res_strs[0]) 
     
     class genomic_params:
         """Nested class to store genomic parameters for the workflow"""
 
         def __init__(self):
-            self.cell_types = ["GM12878"]
+            self.cell_types = ["GM12878", "K562"]
             self.ref_genome = "hg38"  # used to read paths dynamically in config file
             self.resolutions = [1000000, 10000]  # list of integers to query
             self.res_strs = [
@@ -71,7 +71,7 @@ class Config:
 
         def initialize_bed_paths(self):
             """Initialize paths for indexing genomic sequences"""
-            self.ref_genome_bins_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.res_str}/bins_hg38.bed"
+            self.ref_genome_bins = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/bins/bins_{self.res_str}_hg38.bed"
             self.chrom_sizes_infile = "/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/hg38.chrom.sizes"
             
         def initialize_hic_paths(self):
@@ -97,6 +97,7 @@ class Config:
         def initialize_temp_paths(self):
             """Initialize paths for temporary files"""
             self.temp_dir = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}"
+            self.gexf_dir = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/graphs"
 
         def initialize_hub_paths(self):
             """ nodesets of different resolutions stored in hdf5 format """
