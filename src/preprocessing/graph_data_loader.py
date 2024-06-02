@@ -569,7 +569,7 @@ def whole_genome_edgelist(config, chromosomes, res, res_str, threshold=0):
         loader.oe_intra_edgelist_single_chr(threshold)
 
 
-def whole_genome_oe_plot(
+def oe_plots(
     chrom, config, res, res_str, output_dir_oe_plot, start, end, threshold=0
 ):
     """
@@ -579,12 +579,12 @@ def whole_genome_oe_plot(
     loader = DataLoader(config, chrom, res, res_str)
     loader.oe_plot_single_chr(output_dir_oe_plot, start, end, threshold) #can pass cmap, vmin, vmax
 
-def run_parallel_oe_plot(config, chromosomes, current_res, current_res_str, output_dir_oe_plot, start, end, threshold):
+def run_parallel_oe_plots(config, chromosomes, current_res, current_res_str, output_dir_oe_plot, start, end, threshold):
     # multiprocessing on whole genome
     with Pool() as pool:
         pool.map(
             partial(
-                whole_genome_oe_plot,
+                oe_plots,
                 config=config,
                 res=current_res,
                 res_str=current_res_str,

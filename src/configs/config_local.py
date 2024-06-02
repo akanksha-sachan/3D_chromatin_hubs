@@ -97,7 +97,7 @@ class Config:
         def initialize_temp_paths(self):
             """Initialize paths for temporary files"""
             self.temp_dir = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}"
-            self.gexf_dir = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/graphs"
+            self.gexf_dir = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/graphs/{self.res_str}"
 
         def initialize_hub_paths(self):
             """ nodesets of different resolutions stored in hdf5 format """

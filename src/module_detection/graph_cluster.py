@@ -4,6 +4,7 @@
 
 import os
 import sys
+from functools import partial
 from multiprocessing import Pool
 
 import matplotlib.pyplot as plt
@@ -63,15 +64,15 @@ class Graph:
             self.nodeset_attrs
         )  # assigning nodeset id to edgelist nodes using start
         cols_node_id = self.edge_df["y1"].map(self.nodeset_attrs)
-        weights = self.edge_df["counts"].values
+        weights = self.edge_df["counts"].values  # edge weights
         num_nodes = len(
             nodeset
         )  # create affinity matrix of only current edges and not whole chr.
-        self.affinity_matrix = csr_matrix(
+        affinity_matrix = csr_matrix(
             (weights, (rows_node_id, cols_node_id)), shape=(num_nodes, num_nodes)
         )
         # make upper triangular matrix symmetric (not needed for spectral clustering but for visualization of graph)
-        #self.affinity_matrix = affinity_matrix + affinity_matrix.T - csr_matrix((affinity_matrix.diagonal(), (range(num_nodes), range(num_nodes))), shape=(num_nodes, num_nodes))
+        self.affinity_matrix = affinity_matrix + affinity_matrix.T - csr_matrix((affinity_matrix.diagonal(), (range(num_nodes), range(num_nodes))), shape=(num_nodes, num_nodes))
 
     def construct_hub_edgelist():
         """
@@ -90,39 +91,68 @@ class Cluster(Graph):
     c) multi scale OE (global) + loop (local) edges
     """
 
-    def __init__(self, config, chrom, current_res_str):
+    def __init__(self, config, chrom, current_res_str, n_clusters=2):
         super().__init__(config, chrom, current_res_str)
         self.load_edges()  # call function from parent to load edges
         self.edgelist_to_csr_affinity_matrix()
+        self.number_of_clusters = n_clusters
         self.cluster_labels = None
         self.graphs_outdir = config.paths.gexf_dir
 
-    def perform_spectral_clustering(self, n_clusters):
+    def spectral_clustering(self):
         """perform spectral clustering on the affinity matrix"""
         affinity_matrix = self.affinity_matrix
         spectral = SpectralClustering(
-            n_clusters=n_clusters, affinity="precomputed", assign_labels="discretize"
-        )  #cluster_labels coming from image segmentation algo
+            n_clusters=self.number_of_clusters, affinity="precomputed", assign_labels="discretize"
+        )  # cluster_labels coming from image segmentation algo
         self.cluster_labels = spectral.fit_predict(affinity_matrix)
 
     def append_labels_to_nodeset(self):
-        """ add lables as attrs to the nodeset dict """
-        nodeset_dict = self.nodeset_attrs #{start:idx}
+        """add lables as attrs to the nodeset dict"""
+        nodeset_dict = self.nodeset_attrs  # {start:idx}
         # append cluster labels as {start: (idx, cluster_label)}
-        self.nodeset_attrs = {start: (set_idx, self.cluster_labels[set_idx]) for start, set_idx in nodeset_dict.items()}
+        self.nodeset_attrs = {
+            start: (set_idx, self.cluster_labels[set_idx])
+            for start, set_idx in nodeset_dict.items()
+        }
 
     def create_gexf(self):
         """store the clusters in a gexf format for viz"""
-        pass
+        G = nx.Graph()
+        # nodes with cluster labels as attributes
+        for node, (set_idx, cluster) in self.nodeset_attrs.items():
+            G.add_node(node, cluster=cluster)
+
+        # edges from the CSR matrix
+        rows, cols = self.affinity_matrix.nonzero()
+        weights = self.affinity_matrix.data
+        for i, j, weight in zip(rows, cols, weights):
+            if i < j:  # to ensure we don't duplicate edges
+                G.add_edge(i, j, weight=weight)
+
+        outfile = (
+            f"{self.graphs_outdir}/{self.query_group_chrom}_{self.query_key_edge}.gexf"
+        )
+        nx.write_gexf(G, outfile)
+
+
+def single_chrom_cluster(chrom, config, res_str):
+    """perform spectral clustering on single intra-chromosomal graph"""
+    modules = Cluster(config, chrom, res_str, n_clusters=2)
+    modules.spectral_clustering()
+    modules.append_labels_to_nodeset()
+    modules.create_gexf()
 
 
 if __name__ == "__main__":
 
     config = Config()
-    # inspect_h5_file(config.paths.edgelist_outfile) #utils func
-
-    modules = Cluster(
-        config, config.genomic_params.chromosomes[0], config.genomic_params.res_strs[0]
-    )
-    modules.perform_spectral_clustering(2)
-    modules.append_labels_to_nodeset()
+    with Pool() as pool:
+        pool.map(
+            partial(
+                single_chrom_cluster,
+                config=config,
+                res_str=config.genomic_params.res_strs[0],
+            ),
+            config.genomic_params.chromosomes,
+        )
