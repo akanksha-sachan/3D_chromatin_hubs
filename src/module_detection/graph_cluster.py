@@ -20,9 +20,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     from ..configs.config_local import Config
+    from ..preprocessing import *
     from ..utils import *
 except ImportError:
     from configs.config_local import Config
+    from preprocessing import *
     from utils import *
 
 
@@ -32,17 +34,24 @@ class Graph:
     def __init__(
         self, config, current_chrom, current_res_str, nodeset_key="oe_intra_0"
     ):
+        #basic params init
+        self.config = config
+        self.chrom = current_chrom
+        self.res_str = current_res_str
+
+        #query data_loader object init
         self.edgelist_h5_infile = (
             config.paths.edgelist_outfile
-        )  # outfile from dataloader
+        ) 
         self.query_group_chrom = current_chrom  # current chrom to build graph for
         self.query_subgroup_res = f"_{current_res_str}"
         self.query_key_edge = nodeset_key
         self.bins_bed = config.paths.ref_genome_bins
 
+        #graph data attrs init
         self.edge_df = None  # extracted df for quick access
-        self.nodeset_attrs = None  # {start:idx} : start indicates the genomic loci of the node, and idx is nodeset order
-        self.affinity_matrix = None  # graph matrix
+        self.nodeset_attrs = None  # {start:(idx, attrs)} : start indicates the genomic loci of the node, and idx is nodeset order
+        self.affinity_matrix = None  # affinity matrix to represent constructed graph
 
     def load_edges(self):
         """extract pandas dataframe dataset for building graph from h5"""
@@ -98,10 +107,11 @@ class Cluster(Graph):
     c) multi scale OE (global) + loop (local) edges
     """
 
-    def __init__(self, config, chrom, current_res_str, n_clusters=2):
+    def __init__(self, config, chrom, current_res, current_res_str, n_clusters=2):
         super().__init__(config, chrom, current_res_str)
         self.load_edges()  # call function from parent to load edges
         self.edgelist_to_csr_affinity_matrix()
+        self.res = current_res
         self.number_of_clusters = n_clusters
         self.cluster_labels = None
         self.graphs_outdir = config.paths.gexf_dir
@@ -116,7 +126,7 @@ class Cluster(Graph):
         )  # cluster_labels coming from image segmentation algo
         self.cluster_labels = spectral.fit_predict(affinity_matrix)
 
-    def append_labels_to_nodeset(self):
+    def append_cluster_labels_to_nodeset(self):
         """add lables as attrs to the nodeset dict"""
         nodeset_dict = self.nodeset_attrs  # {start:set_idx}
         # append cluster labels as {start: (set_idx, cluster_label)}
@@ -124,7 +134,7 @@ class Cluster(Graph):
             start: (set_idx, self.cluster_labels[set_idx])
             for start, set_idx in nodeset_dict.items()
         }
-
+    
     def create_gexf(self):
         """store the clusters in a gexf format for viz"""
         G = nx.Graph()
@@ -148,20 +158,39 @@ class Cluster(Graph):
             f"{self.graphs_outdir}/{self.query_group_chrom}_{self.query_key_edge}.gexf"
         )
         nx.write_gexf(G, outfile)
-
+    
+    def cluster_stats(self):
+        """return cluster stats"""
+        cluster_size_0 = np.bincount(self.cluster_labels)
+        pass
+    
     def oe_confusion_matrix(self):
         """calculate confusion matrix for clustering OE edges using AB compartments as ground truth"""
-        # ab_score =
-        pass
+        query = HiCQuery(self.config, self.chrom, self.res, self.res_str)
+        ab_bed_dict = query.ab_comp.load_bigwig_chromosomal_ab()
+        # append the A/B labels to the nodeset_attrs dict by mapping 'start' key to get {start: (set_idx, cluster_label, ab_label)}
+        self.nodeset_attrs = {
+            start: (set_idx, cluster_label, ab_bed_dict.get(start, (None, None))[1]) #get [1] from (signal, a/b label)
+            for start, (set_idx, cluster_label) in self.nodeset_attrs.items()
+        }
+        #get the confusion matrix between cluster_labels as predicted and ab_labels as ground truth
+        cluster_labels = np.array([cluster_label for _, (_, cluster_label, _) in self.nodeset_attrs.items()])
+        ab_labels = np.array([ab_label for _, (_, _, ab_label) in self.nodeset_attrs.items()])
 
+        confusion_matrix = np.zeros((2, 2))
+        for i in range(2):
+            for j in range(2):
+                confusion_matrix[i, j] = np.sum((cluster_labels == i) & (ab_labels == j))
+        return confusion_matrix 
 
-def single_chrom_clustering(chrom, config, res_str):
+def single_chrom_clustering(chrom, config, res, res_str):
     """perform spectral clustering on single intra-chromosomal graph"""
-    modules = Cluster(config, chrom, res_str, n_clusters=2)
+    modules = Cluster(config, chrom, res, res_str, n_clusters=2)
     modules.spectral_clustering()
-    modules.append_labels_to_nodeset()
+    modules.append_cluster_labels_to_nodeset()
     modules.create_gexf()
-
+    #conf_mtx = modules.oe_confusion_matrix()
+    #return conf_mtx
 
 def run_parallel_clustering(config):
     """run spectral clustering on all chromosomes in parallel"""
@@ -170,6 +199,7 @@ def run_parallel_clustering(config):
             partial(
                 single_chrom_clustering,
                 config=config,
+                res = config.genomic_params.resolutions[0],
                 res_str=config.genomic_params.res_strs[0],
             ),
             config.genomic_params.chromosomes,
@@ -179,8 +209,5 @@ def run_parallel_clustering(config):
 if __name__ == "__main__":
 
     config = Config()
-    # single_chrom_clustering("chr1", config, "1Mb")
-    # run_parallel_clustering(config)
-    modules = Cluster(config, "chr1", "1Mb", n_clusters=2)
-    modules.spectral_clustering()
-    modules.append_labels_to_nodeset()
+    #single_chrom_clustering("chr1", config, 1000000, "1Mb")
+    run_parallel_clustering(config)
