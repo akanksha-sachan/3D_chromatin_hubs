@@ -284,38 +284,36 @@ class HiCQuery(Query):
         def load_bigwig_chromosomal_ab(self):
             """
             Get AB score from GEO as ground truth; bigwig files have multiple zoom levels, some match the resolution of hic data
+            Fact: NONEs are returned for bins that are centromeric regions or other gaps in epigenetic sequencing data (eg. chrY)
+
             Input: .bed file of hg38 bins at the specified res, bigwig file
             Returns: a list of A/B classes quantified from bigwig signal
             """
-            # obtain the number of bins in the chromosome
+            # obtain the number of bins in the chromosome from bed file
             whole_genome_bins_bed = config.paths.ref_genome_bins
             bins = pd.read_csv(whole_genome_bins_bed, sep="\t", header=None)
             bins.columns = ["chrom", "start", "end"]
             bins_chr = bins[bins["chrom"] == self.parent.chrom]
+            
+            # query the bigwig file for the signal
             start_bp = bins_chr["start"].iloc[0]
             end_bp = bins_chr["end"].iloc[-1]
             nm_bins = bins_chr.shape[0]
-
-            # query the bigwig file for the signal
             ab_geo_bw = pyBigWig.open(config.paths.compartments_infile)
             signal = ab_geo_bw.stats(
-                self.chrom, start_bp, end_bp, type="mean", nBins=nm_bins
+                self.parent.chrom, start_bp, end_bp, type="mean", nBins=nm_bins
             )
-            filtered_signal = [val for val in signal if val is not None]
+            ab_geo_bw.close()
 
-            # convert bins_chr to a dict with {start:bin_idx} where bin_idx is the df idx
-            bins_chr = (
-                bins_chr.reset_index()
-            )  # reset index but keep the original index as a column
-            bins_chr = bins_chr.set_index("start")
-            bins_chr_dict = bins_chr["index"].to_dict()
-
-            # #label bins as A/B compartments based on if e1 is positive or negative
-            # bins_dict = {} #idx of bin from ref genome: start, a/b label
-            # bins_dict['a/b'] = np.sign(filtered_signal).flatten()
-            # #covert -1 to B label and +1 to A label
-            # bins_dict['a/b'] = bins_dict['a/b'].replace({-1:'B', 1:'A'})
-            return bins_chr_dict
+            # map signal to bins and append A/B labels
+            bed_signal_dict = {}
+            for idx, (start, sig) in enumerate(zip(bins_chr['start'], signal)):
+                if sig is None:
+                    bed_signal_dict[start] = (sig, None)
+                else:
+                    ab_label = 'A' if sig >= 0 else 'B'
+                    bed_signal_dict[start] = (sig, ab_label)
+            return bed_signal_dict
 
         def ab_score_correlation(self):
             # TODO

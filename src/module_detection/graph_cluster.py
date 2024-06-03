@@ -179,7 +179,8 @@ def run_parallel_clustering(config):
 if __name__ == "__main__":
 
     config = Config()
-    single_chrom_clustering("chr1", config, "1Mb")
+    # single_chrom_clustering("chr1", config, "1Mb")
     # run_parallel_clustering(config)
-    # modules = Cluster(config, "chr1", "1Mb", n_clusters=2)
-    # print(modules.affinity_matrix.shape)
+    modules = Cluster(config, "chr1", "1Mb", n_clusters=2)
+    modules.spectral_clustering()
+    modules.append_labels_to_nodeset()
