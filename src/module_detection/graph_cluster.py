@@ -72,7 +72,14 @@ class Graph:
             (weights, (rows_node_id, cols_node_id)), shape=(num_nodes, num_nodes)
         )
         # make upper triangular matrix symmetric (not needed for spectral clustering but for visualization of graph)
-        self.affinity_matrix = affinity_matrix + affinity_matrix.T - csr_matrix((affinity_matrix.diagonal(), (range(num_nodes), range(num_nodes))), shape=(num_nodes, num_nodes))
+        self.affinity_matrix = (
+            affinity_matrix
+            + affinity_matrix.T
+            - csr_matrix(
+                (affinity_matrix.diagonal(), (range(num_nodes), range(num_nodes))),
+                shape=(num_nodes, num_nodes),
+            )
+        )
 
     def construct_hub_edgelist():
         """
@@ -103,14 +110,16 @@ class Cluster(Graph):
         """perform spectral clustering on the affinity matrix"""
         affinity_matrix = self.affinity_matrix
         spectral = SpectralClustering(
-            n_clusters=self.number_of_clusters, affinity="precomputed", assign_labels="discretize"
+            n_clusters=self.number_of_clusters,
+            affinity="precomputed",
+            assign_labels="discretize",
         )  # cluster_labels coming from image segmentation algo
         self.cluster_labels = spectral.fit_predict(affinity_matrix)
 
     def append_labels_to_nodeset(self):
         """add lables as attrs to the nodeset dict"""
-        nodeset_dict = self.nodeset_attrs  # {start:idx}
-        # append cluster labels as {start: (idx, cluster_label)}
+        nodeset_dict = self.nodeset_attrs  # {start:set_idx}
+        # append cluster labels as {start: (set_idx, cluster_label)}
         self.nodeset_attrs = {
             start: (set_idx, self.cluster_labels[set_idx])
             for start, set_idx in nodeset_dict.items()
@@ -119,24 +128,34 @@ class Cluster(Graph):
     def create_gexf(self):
         """store the clusters in a gexf format for viz"""
         G = nx.Graph()
-        # nodes with cluster labels as attributes
-        for node, (set_idx, cluster) in self.nodeset_attrs.items():
-            G.add_node(node, cluster=cluster)
-
-        # edges from the CSR matrix
-        rows, cols = self.affinity_matrix.nonzero()
-        weights = self.affinity_matrix.data
-        for i, j, weight in zip(rows, cols, weights):
-            if i < j:  # to ensure we don't duplicate edges
-                G.add_edge(i, j, weight=weight)
-
+        # add nodes from nodeset
+        for start, (set_idx, cluster_label) in self.nodeset_attrs.items():
+            G.add_node(
+                set_idx,
+                start=str(start),
+                cluster_label=cluster_label,
+            )
+        # add edges from edgelist, map nodes in edgelist to nodes in the nx graph using start
+        for _, row in self.edge_df.iterrows():
+            start_x, start_y = row["x1"], row["y1"]
+            start_x_set_idx, start_y_set_idx = (
+                self.nodeset_attrs[start_x][0],
+                self.nodeset_attrs[start_y][0],
+            )
+            G.add_edge(start_x_set_idx, start_y_set_idx, weight=row["counts"])
+        # write to gexf
         outfile = (
             f"{self.graphs_outdir}/{self.query_group_chrom}_{self.query_key_edge}.gexf"
         )
         nx.write_gexf(G, outfile)
 
+    def oe_confusion_matrix(self):
+        """calculate confusion matrix for clustering OE edges using AB compartments as ground truth"""
+        # ab_score =
+        pass
 
-def single_chrom_cluster(chrom, config, res_str):
+
+def single_chrom_clustering(chrom, config, res_str):
     """perform spectral clustering on single intra-chromosomal graph"""
     modules = Cluster(config, chrom, res_str, n_clusters=2)
     modules.spectral_clustering()
@@ -144,15 +163,23 @@ def single_chrom_cluster(chrom, config, res_str):
     modules.create_gexf()
 
 
-if __name__ == "__main__":
-
-    config = Config()
+def run_parallel_clustering(config):
+    """run spectral clustering on all chromosomes in parallel"""
     with Pool() as pool:
         pool.map(
             partial(
-                single_chrom_cluster,
+                single_chrom_clustering,
                 config=config,
                 res_str=config.genomic_params.res_strs[0],
             ),
             config.genomic_params.chromosomes,
         )
+
+
+if __name__ == "__main__":
+
+    config = Config()
+    single_chrom_clustering("chr1", config, "1Mb")
+    # run_parallel_clustering(config)
+    # modules = Cluster(config, "chr1", "1Mb", n_clusters=2)
+    # print(modules.affinity_matrix.shape)

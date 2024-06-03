@@ -68,10 +68,10 @@ class HiCQuery(Query):
 
         # instantiate nested classes
         self.ab_comp = self.ab_comp(
-            config
+            self, config
         )  # passing config if they need specifc attrs from there
-        self.loop = self.loop(config)
-        self.tad = self.tad(config)
+        self.loop = self.loop(self, config)
+        self.tad = self.tad(self, config)
 
         # checking for data availability
         self.res_list = config.genomic_params.resolutions
@@ -240,10 +240,11 @@ class HiCQuery(Query):
     class ab_comp:
         """Nested class for calling A/B compartments from .hic data and reliability checks"""
 
-        def __init__(self, config):
+        def __init__(self, parent, config):
+            self.parent = parent  # ref to the HiCQuery instance
             self.ab_bigwig_file = config.paths.compartments_infile
 
-        def ab_score(self, matrix):
+        def calculate_ab_score(self, matrix):
             """
             Raw -> normalised -> O/E -> Pearson -> PCA gives A/B
 
@@ -262,7 +263,7 @@ class HiCQuery(Query):
             projected_matrix = pca.fit_transform(matrix)
             return projected_matrix, pca
 
-        def e1_to_bigwig(bins, e1_values, chromsizes, output_file="e1.bw"):
+        def ab_score_to_bigwig(bins, e1_values, chromsizes, output_file="e1.bw"):
             """
             Save e1 as a bigwig track for one chr
             """
@@ -280,15 +281,44 @@ class HiCQuery(Query):
             bw.close()
             print(f"BigWig file saved to {output_file}")
 
-        def get_ab_bigwig(self):
-            #TODO (present in jupyter NB)
+        def load_bigwig_chromosomal_ab(self):
             """
-            Get the PCA score for the compartment calls
+            Get AB score from GEO as ground truth; bigwig files have multiple zoom levels, some match the resolution of hic data
+            Input: .bed file of hg38 bins at the specified res, bigwig file
+            Returns: a list of A/B classes quantified from bigwig signal
             """
-            pass
+            # obtain the number of bins in the chromosome
+            whole_genome_bins_bed = config.paths.ref_genome_bins
+            bins = pd.read_csv(whole_genome_bins_bed, sep="\t", header=None)
+            bins.columns = ["chrom", "start", "end"]
+            bins_chr = bins[bins["chrom"] == self.parent.chrom]
+            start_bp = bins_chr["start"].iloc[0]
+            end_bp = bins_chr["end"].iloc[-1]
+            nm_bins = bins_chr.shape[0]
+
+            # query the bigwig file for the signal
+            ab_geo_bw = pyBigWig.open(config.paths.compartments_infile)
+            signal = ab_geo_bw.stats(
+                self.chrom, start_bp, end_bp, type="mean", nBins=nm_bins
+            )
+            filtered_signal = [val for val in signal if val is not None]
+
+            # convert bins_chr to a dict with {start:bin_idx} where bin_idx is the df idx
+            bins_chr = (
+                bins_chr.reset_index()
+            )  # reset index but keep the original index as a column
+            bins_chr = bins_chr.set_index("start")
+            bins_chr_dict = bins_chr["index"].to_dict()
+
+            # #label bins as A/B compartments based on if e1 is positive or negative
+            # bins_dict = {} #idx of bin from ref genome: start, a/b label
+            # bins_dict['a/b'] = np.sign(filtered_signal).flatten()
+            # #covert -1 to B label and +1 to A label
+            # bins_dict['a/b'] = bins_dict['a/b'].replace({-1:'B', 1:'A'})
+            return bins_chr_dict
 
         def ab_score_correlation(self):
-            #TODO
+            # TODO
             """
             Reliability: Compare the compartment calls with reference databases using R2
             """
@@ -297,7 +327,8 @@ class HiCQuery(Query):
     class loop:
         """Nested class for analysis of loops from .hic data"""
 
-        def __init__(self, config):
+        def __init__(self, parent, config):
+            self.parent = parent
             self.hiccups_merged_infile = config.paths.hiccups_merged_infile
             self.loops_txt_infile = config.paths.loops_txt_infile
             self.loops_bedpe_outfile = config.paths.loops_bedpe_outfile
@@ -443,7 +474,7 @@ class HiCQuery(Query):
             return dis
 
         def loop_anchor_overlap_percent(self):
-            #TODO
+            # TODO
             """
             Reliability: Check for overlap between loop anchors within a 1-d dist threshold
             """
@@ -453,8 +484,8 @@ class HiCQuery(Query):
     class tad:
         """Nested class for insulation score calculation from .hic data"""
 
-        def __init__(self, config):
-            pass
+        def __init__(self, parent, config):
+            self.parent = parent
 
         def get_insulation_score(self, m, windowsize=500000, res=10000):
             """
@@ -520,6 +551,7 @@ class HiCQuery(Query):
 #         self.mcool = cooler.Cooler(self.mcool_file)  # cooler object from cooler
 #         print("Mcool file loaded")
 
+
 class DataLoader(HiCQuery):
     """
     Class for creating outputs for the data_loader script
@@ -538,9 +570,13 @@ class DataLoader(HiCQuery):
         """Save pandas df oe edges in .h5 format"""
         oe_intra_df = self.oe_intra_df(threshold)
         thresh_str = str(threshold).replace(".", "_")
-        
+
         with pd.HDFStore(self.edgelist_outfile, mode=mode) as store:
-            store.put(f"{self.chrom}/_{self.res_str}/oe_intra_{thresh_str}", oe_intra_df, format="table")
+            store.put(
+                f"{self.chrom}/_{self.res_str}/oe_intra_{thresh_str}",
+                oe_intra_df,
+                format="table",
+            )
 
     def oe_plot_single_chr(
         self, output_dir_oe_plot, start, end, threshold=0, cmap="bwr", vmin=0, vmax=1
@@ -564,22 +600,32 @@ def whole_genome_edgelist(config, chromosomes, res, res_str, threshold=0):
     multiprocess methods to run on the whole genome
     writing to .h5 using multiprocessing requires file locking
     """
-    for chrom in chromosomes:  #use for loop to write sequentially to .h5
+    for chrom in chromosomes:  # use for loop to write sequentially to .h5
         loader = DataLoader(config, chrom, res, res_str)
         loader.oe_intra_edgelist_single_chr(threshold)
 
 
-def oe_plots(
-    chrom, config, res, res_str, output_dir_oe_plot, start, end, threshold=0
-):
+def oe_plots(chrom, config, res, res_str, output_dir_oe_plot, start, end, threshold=0):
     """
     multiprocess to run on the whole genome
     writing to .h5 using multiprocessing requires file locking
     """
     loader = DataLoader(config, chrom, res, res_str)
-    loader.oe_plot_single_chr(output_dir_oe_plot, start, end, threshold) #can pass cmap, vmin, vmax
+    loader.oe_plot_single_chr(
+        output_dir_oe_plot, start, end, threshold
+    )  # can pass cmap, vmin, vmax
 
-def run_parallel_oe_plots(config, chromosomes, current_res, current_res_str, output_dir_oe_plot, start, end, threshold):
+
+def run_parallel_oe_plots(
+    config,
+    chromosomes,
+    current_res,
+    current_res_str,
+    output_dir_oe_plot,
+    start,
+    end,
+    threshold,
+):
     # multiprocessing on whole genome
     with Pool() as pool:
         pool.map(
@@ -597,6 +643,7 @@ def run_parallel_oe_plots(config, chromosomes, current_res, current_res_str, out
         )
 
     print(f"All plots saved to {output_dir_oe_plot}")
+
 
 if __name__ == "__main__":
 
@@ -617,7 +664,8 @@ if __name__ == "__main__":
     # custom colormap
     REDMAP = LinearSegmentedColormap.from_list("bright_red", [(1, 1, 1), (1, 0, 0)])
 
-    #write edgelist file for whole genome
-    whole_genome_edgelist(config, chromosomes, current_res, current_res_str, threshold)
-    
-    
+    # write edgelist file for whole genome
+    # whole_genome_edgelist(config, chromosomes, current_res, current_res_str, threshold)
+    chrom = chromosomes[0]
+    query = HiCQuery(config, chrom, current_res, current_res_str)
+    print(query.ab_comp.load_bigwig_chromosomal_ab())
