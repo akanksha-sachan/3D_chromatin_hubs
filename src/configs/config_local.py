@@ -73,6 +73,7 @@ class Config:
             """Initialize paths for indexing genomic sequences"""
             self.ref_genome_bins = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/bins/bins_{self.res_str}_hg38.bed"
             self.chrom_sizes_infile = "/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/hg38.chrom.sizes"
+            self.sub_compartments_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/GSE63525_subcompartments_hg38.bed"
             
         def initialize_hic_paths(self):
             """Initialize paths for Hi-C data"""

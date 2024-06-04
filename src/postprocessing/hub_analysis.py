@@ -20,7 +20,17 @@ except ImportError:
     from utils import *
 
 ## overlapping node annotations
-def overlap_TSS_cluster_node():
+def overlap_genes_to_nodeset():
     """ overlap TSS bin loci to nodeset locis and store their split per cluster"""
     #search nodeset_attrs starts to overlap gene TSS and gene body bins
     pass
+
+def overlap_sub_compartments_to_nodeset():
+    """ overlap subcompartments to nodeset locis ; works ideally with inter-chr nodesets"""
+    #search nodeset_attrs starts to overlap subcompartments
+    pass
+
+## hub physical properties
+def cluster_size_distribution():
+        """calculate cluster size distribution split between number of clusters"""
+        pass

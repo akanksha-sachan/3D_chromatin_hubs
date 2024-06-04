@@ -1,4 +1,4 @@
-######### CONTACT MATRIX (.hic/.mcool) -> EDGELIST (HDF5) of graph #########
+1######### CONTACT MATRIX (.hic/.mcool) -> EDGELIST (HDF5) of graph #########
 ######### Calling loops, compartments and TADs #########
 ######### Creating edge lists of local and global interactions; plotting edge_reliabilities #########
 
@@ -237,9 +237,15 @@ class HiCQuery(Query):
             self.parent = parent  # ref to the HiCQuery instance
             self.ab_bigwig_file = config.paths.compartments_infile
 
+            # obtain the number of bins in the chromosome from bed file
+            whole_genome_bins_bed = config.paths.ref_genome_bins
+            self.bins_wg = pd.read_csv(whole_genome_bins_bed, sep="\t", header=None)
+            self.bins_wg.columns = ["chrom", "start", "end"]
+            self.bins_chr = self.bins_wg[self.bins_wg["chrom"] == self.parent.chrom] #chrom start end for the current chrom
+
         def calculate_ab_score(self, matrix):
             """
-            Raw -> normalised -> O/E -> Pearson -> PCA gives A/B
+            Raw -> normalised (VC) -> O/E -> Pearson -> PCA gives A/B
 
             Input: OE matrix (csr/numpy)
             Output: A/B compartment calls
@@ -252,9 +258,12 @@ class HiCQuery(Query):
             matrix = np.corrcoef(matrix)
             np.fill_diagonal(matrix, 1)
             matrix[np.isnan(matrix)] = 0.0
+            # 1d matrix transformed using PC1 
             pca = PCA(n_components=1)
             projected_matrix = pca.fit_transform(matrix)
-            return projected_matrix, pca
+            bin_starts = self.bins_chr["start"].values #create dict {start:pc1}
+            ab_scores = {start: projected_matrix[i, 0] for i, start in enumerate(bin_starts)}
+            return ab_scores
 
         def ab_score_to_bigwig(bins, e1_values, chromsizes, output_file="e1.bw"):
             """
@@ -280,14 +289,9 @@ class HiCQuery(Query):
             Fact: NONEs are returned for bins that are centromeric regions or other gaps in epigenetic sequencing data (eg. chrY)
 
             Input: .bed file of hg38 bins at the specified res, bigwig file
-            Returns: a list of A/B classes quantified from bigwig signal
+            Returns: a list of A/B classes quantified from bigwig signal for the whole bed file 
             """
-            # obtain the number of bins in the chromosome from bed file
-            whole_genome_bins_bed = self.parent.config.paths.ref_genome_bins
-            bins = pd.read_csv(whole_genome_bins_bed, sep="\t", header=None)
-            bins.columns = ["chrom", "start", "end"]
-            bins_chr = bins[bins["chrom"] == self.parent.chrom]
-            
+            bins_chr = self.bins_chr
             # query the bigwig file for the signal
             start_bp = bins_chr["start"].iloc[0]
             end_bp = bins_chr["end"].iloc[-1]
@@ -308,11 +312,12 @@ class HiCQuery(Query):
                     bed_signal_dict[start] = (sig, ab_label)
             return bed_signal_dict
 
-        def ab_score_correlation(self, ab_score, ):
+        def ab_score_correlation(self, ab_score, bigwig_signal):
             """
-            Reliability: Compare the compartment calls with reference databases using R2
+            Reliability: Compare the compartment calls with reference databases using Pearson, spearman, and p-value
             """
-            
+            pass
+
 
     class loop:
         """Nested class for analysis of loops from .hic data"""
@@ -640,8 +645,8 @@ if __name__ == "__main__":
     # whole genome run test
     config = Config()
     chromosomes = config.genomic_params.chromosomes
-    current_res = config.genomic_params.resolutions[0]  # 1Mb for OE part
-    current_res_str = config.genomic_params.res_strs[0]  # 1Mb for OE part
+    current_res = config.genomic_params.resolutions[0]  
+    current_res_str = config.genomic_params.res_strs[0]  
 
     # params for OE matrix visualisation
     threshold = 0  # tweak based on single chr viz
@@ -658,4 +663,4 @@ if __name__ == "__main__":
     # whole_genome_edgelist(config, chromosomes, current_res, current_res_str, threshold)
     chrom = chromosomes[0]
     query = HiCQuery(config, chrom, current_res, current_res_str)
-    print(query.ab_comp.load_bigwig_chromosomal_ab())
+    print(query.ab_comp.load_bigwig_chromosomal_ab()) #249 bins for chr1

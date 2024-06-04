@@ -177,8 +177,13 @@ class Cluster(Graph):
             for j in range(2):
                 confusion_matrix[i, j] = np.sum((cluster_labels == i) & (mapped_ab_labels == j))
         return confusion_matrix 
+    
+    def accuracy_metrics_single_chr(self):
+        """calculate accuracy metrics for single chromosomal clustering"""
+        pass
 
-def single_chrom_clustering(chrom, config, res, res_str):
+
+def run_single_chrom(chrom, config, res, res_str):
     """perform spectral clustering on single intra-chromosomal graph"""
     modules = Cluster(config, chrom, res, res_str, n_clusters=2)
     modules.spectral_clustering()
@@ -192,7 +197,7 @@ def run_parallel_clustering(config):
     with Pool() as pool:
         pool.map(
             partial(
-                single_chrom_clustering,
+                run_single_chrom,
                 config=config,
                 res = config.genomic_params.resolutions[0],
                 res_str=config.genomic_params.res_strs[0],
