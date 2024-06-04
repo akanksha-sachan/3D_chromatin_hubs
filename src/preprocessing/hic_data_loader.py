@@ -34,7 +34,6 @@ except ImportError:
 
 ############ Query Hic data and call 3D genomic features to create HDF5 edgelist object ############
 
-
 class Query:
     """
     Base class for querying both .mcool/.hic files for observed, OE counts, edges (not needed if only using .hic as input)
@@ -85,7 +84,6 @@ class HiCQuery(Query):
         Check if the resolution is present in the .hic file
         """
         available_resolutions = self.hic.getResolutions()
-
         return all(res in available_resolutions for res in self.res_list)
 
     def read_hic_header(self):
@@ -123,7 +121,6 @@ class HiCQuery(Query):
             #     length = struct.unpack("<i", f.read(4))[0]
             #     chroms.append((name, length))
             # hic_header["chromosomes"] = chroms
-
         return hic_header
 
     @profile
@@ -137,7 +134,6 @@ class HiCQuery(Query):
         observed_list = hicstraw.straw(
             "observed", self.hic_norm, self.hic_file, chrom, chrom, "BP", res
         )
-
         return observed_list
 
     @profile
@@ -153,7 +149,6 @@ class HiCQuery(Query):
         )
         if threshold != 0:
             oe_list = [record for record in oe_list if record.counts >= threshold]
-
         return oe_list
 
     def oe_intra_numpy(self, start, end, threshold=0):
@@ -210,7 +205,6 @@ class HiCQuery(Query):
         # sort the df by x1 (node1 starts) then y1 (node2 starts)
         df.sort_values(by=["x1", "y1"], inplace=True)
         df.reset_index(drop=True, inplace=True)
-
         return df
 
     @profile
@@ -234,7 +228,6 @@ class HiCQuery(Query):
         csr_mat = csr_matrix(
             (value, (row, col)), shape=(dimension, dimension), dtype=float
         )
-
         return csr_mat
 
     class ab_comp:
@@ -248,7 +241,7 @@ class HiCQuery(Query):
             """
             Raw -> normalised -> O/E -> Pearson -> PCA gives A/B
 
-            Input: OE matrix
+            Input: OE matrix (csr/numpy)
             Output: A/B compartment calls
             """
 
@@ -290,7 +283,7 @@ class HiCQuery(Query):
             Returns: a list of A/B classes quantified from bigwig signal
             """
             # obtain the number of bins in the chromosome from bed file
-            whole_genome_bins_bed = config.paths.ref_genome_bins
+            whole_genome_bins_bed = self.parent.config.paths.ref_genome_bins
             bins = pd.read_csv(whole_genome_bins_bed, sep="\t", header=None)
             bins.columns = ["chrom", "start", "end"]
             bins_chr = bins[bins["chrom"] == self.parent.chrom]
@@ -299,13 +292,13 @@ class HiCQuery(Query):
             start_bp = bins_chr["start"].iloc[0]
             end_bp = bins_chr["end"].iloc[-1]
             nm_bins = bins_chr.shape[0]
-            ab_geo_bw = pyBigWig.open(config.paths.compartments_infile)
+            ab_geo_bw = pyBigWig.open(self.parent.config.paths.compartments_infile)
             signal = ab_geo_bw.stats(
                 self.parent.chrom, start_bp, end_bp, type="mean", nBins=nm_bins
             )
             ab_geo_bw.close()
 
-            # map signal to bins and append A/B labels
+            # map signal to bins and append A/B labels: {start: (signal, a/b label)}
             bed_signal_dict = {}
             for idx, (start, sig) in enumerate(zip(bins_chr['start'], signal)):
                 if sig is None:
@@ -315,12 +308,11 @@ class HiCQuery(Query):
                     bed_signal_dict[start] = (sig, ab_label)
             return bed_signal_dict
 
-        def ab_score_correlation(self):
-            # TODO
+        def ab_score_correlation(self, ab_score, ):
             """
             Reliability: Compare the compartment calls with reference databases using R2
             """
-            pass
+            
 
     class loop:
         """Nested class for analysis of loops from .hic data"""

@@ -159,11 +159,6 @@ class Cluster(Graph):
         )
         nx.write_gexf(G, outfile)
     
-    def cluster_stats(self):
-        """return cluster stats"""
-        cluster_size_0 = np.bincount(self.cluster_labels)
-        pass
-    
     def oe_confusion_matrix(self):
         """calculate confusion matrix for clustering OE edges using AB compartments as ground truth"""
         query = HiCQuery(self.config, self.chrom, self.res, self.res_str)
