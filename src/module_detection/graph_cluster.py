@@ -171,11 +171,11 @@ class Cluster(Graph):
         #get the confusion matrix between cluster_labels as predicted and ab_labels as ground truth
         cluster_labels = np.array([cluster_label for _, (_, cluster_label, _) in self.nodeset_attrs.items()])
         ab_labels = np.array([ab_label for _, (_, _, ab_label) in self.nodeset_attrs.items()])
-
+        mapped_ab_labels = np.where(ab_labels == 'A', 0, 1) #map A to 0 and B to 1
         confusion_matrix = np.zeros((2, 2))
         for i in range(2):
             for j in range(2):
-                confusion_matrix[i, j] = np.sum((cluster_labels == i) & (ab_labels == j))
+                confusion_matrix[i, j] = np.sum((cluster_labels == i) & (mapped_ab_labels == j))
         return confusion_matrix 
 
 def single_chrom_clustering(chrom, config, res, res_str):
@@ -183,9 +183,9 @@ def single_chrom_clustering(chrom, config, res, res_str):
     modules = Cluster(config, chrom, res, res_str, n_clusters=2)
     modules.spectral_clustering()
     modules.append_cluster_labels_to_nodeset()
-    modules.create_gexf()
-    #conf_mtx = modules.oe_confusion_matrix()
-    #return conf_mtx
+    #modules.create_gexf()
+    conf_mtx = modules.oe_confusion_matrix()
+    return conf_mtx
 
 def run_parallel_clustering(config):
     """run spectral clustering on all chromosomes in parallel"""
