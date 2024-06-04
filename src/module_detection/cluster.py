@@ -117,7 +117,7 @@ class Cluster(Graph):
         self.graphs_outdir = config.paths.gexf_dir
 
     def spectral_clustering(self):
-        """perform spectral clustering on the affinity matrix"""
+        """perform spectral clustering on the affinity matrix, add cluster labels to nodeset_attrs dict"""
         affinity_matrix = self.affinity_matrix
         spectral = SpectralClustering(
             n_clusters=self.number_of_clusters,
@@ -125,9 +125,6 @@ class Cluster(Graph):
             assign_labels="discretize",
         )  # cluster_labels coming from image segmentation algo
         self.cluster_labels = spectral.fit_predict(affinity_matrix)
-
-    def append_cluster_labels_to_nodeset(self):
-        """add lables as attrs to the nodeset dict"""
         nodeset_dict = self.nodeset_attrs  # {start:set_idx}
         # append cluster labels as {start: (set_idx, cluster_label)}
         self.nodeset_attrs = {
@@ -158,41 +155,61 @@ class Cluster(Graph):
             f"{self.graphs_outdir}/{self.query_group_chrom}_{self.query_key_edge}.gexf"
         )
         nx.write_gexf(G, outfile)
-    
-    def oe_confusion_matrix(self):
-        """calculate confusion matrix for clustering OE edges using AB compartments as ground truth"""
-        query = HiCQuery(self.config, self.chrom, self.res, self.res_str)
-        ab_bed_dict = query.ab_comp.load_bigwig_chromosomal_ab()
-        # append the A/B labels to the nodeset_attrs dict by mapping 'start' key to get {start: (set_idx, cluster_label, ab_label)}
-        self.nodeset_attrs = {
-            start: (set_idx, cluster_label, ab_bed_dict.get(start, (None, None))[1]) #get [1] from (signal, a/b label)
-            for start, (set_idx, cluster_label) in self.nodeset_attrs.items()
-        }
-        #get the confusion matrix between cluster_labels as predicted and ab_labels as ground truth
-        cluster_labels = np.array([cluster_label for _, (_, cluster_label, _) in self.nodeset_attrs.items()])
-        ab_labels = np.array([ab_label for _, (_, _, ab_label) in self.nodeset_attrs.items()])
-        mapped_ab_labels = np.where(ab_labels == 'A', 0, 1) #map A to 0 and B to 1
-        confusion_matrix = np.zeros((2, 2))
-        for i in range(2):
-            for j in range(2):
-                confusion_matrix[i, j] = np.sum((cluster_labels == i) & (mapped_ab_labels == j))
-        return confusion_matrix 
-    
-    def accuracy_metrics_single_chr(self):
-        """calculate accuracy metrics for single chromosomal clustering"""
-        pass
 
+    class evaluation:
+        """class to calculate accuracy metrics for clustering"""
+
+        def __init__(self, parent):
+            self.parent = parent
+    
+        def oe_confusion_matrix(self):
+            """calculate confusion matrix for clustering OE edges using AB compartments as ground truth"""
+            query = HiCQuery(self.parent.config, self.parent.chrom, self.parent.current_res, self.parent.current_res_str)
+            ab_bed_dict = query.ab_comp.load_bigwig_chromosomal_ab()
+            # append the A/B labels to the nodeset_attrs dict by mapping 'start' key to get {start: (set_idx, cluster_label, ab_label)}
+            self.nodeset_attrs = {
+                start: (set_idx, cluster_label, ab_bed_dict.get(start, (None, None))[1]) #get [1] from (signal, a/b label)
+                for start, (set_idx, cluster_label) in self.nodeset_attrs.items()
+            }
+            #get the confusion matrix between cluster_labels as predicted and ab_labels as ground truth
+            cluster_labels = np.array([cluster_label for _, (_, cluster_label, _) in self.nodeset_attrs.items()])
+            ab_labels = np.array([ab_label for _, (_, _, ab_label) in self.nodeset_attrs.items()])
+            mapped_ab_labels = np.where(ab_labels == 'A', 0, 1) #map A to 0 and B to 1
+            confusion_matrix = np.zeros((2, 2))
+            for i in range(2):
+                for j in range(2):
+                    confusion_matrix[i, j] = np.sum((cluster_labels == i) & (mapped_ab_labels == j))
+            return confusion_matrix 
+        
+        def accuracy_metrics_single_chr(self):
+            """calculate accuracy metrics (F1 score from the confusion matrix) for single chromosomal clustering"""
+            pass
+
+        ## hub physical properties
+        def cluster_size_distribution_single_chr(self):
+                """calculate cluster size distribution split between number of clusters"""
+                pass
+        
+        ## overlapping node annotations
+        def overlap_genes_to_nodeset(self):
+            """ overlap TSS bin loci to nodeset locis and store their split per cluster"""
+            #search nodeset_attrs starts to overlap gene TSS and gene body bins
+            pass
+
+        def overlap_sub_compartments_to_nodeset(self):
+            """ overlap subcompartments to nodeset locis ; works ideally with inter-chr nodesets"""
+            #search nodeset_attrs starts to overlap subcompartments
+            pass
 
 def run_single_chrom(chrom, config, res, res_str):
     """perform spectral clustering on single intra-chromosomal graph"""
     modules = Cluster(config, chrom, res, res_str, n_clusters=2)
     modules.spectral_clustering()
-    modules.append_cluster_labels_to_nodeset()
     #modules.create_gexf()
     conf_mtx = modules.oe_confusion_matrix()
     return conf_mtx
 
-def run_parallel_clustering(config):
+def run_parallel(config):
     """run spectral clustering on all chromosomes in parallel"""
     with Pool() as pool:
         pool.map(
@@ -205,9 +222,12 @@ def run_parallel_clustering(config):
             config.genomic_params.chromosomes,
         )
 
+def whole_genome_evaluation(config):
+    """calculate evaluation metrics for whole genome together"""
+    pass
 
 if __name__ == "__main__":
 
     config = Config()
     #single_chrom_clustering("chr1", config, 1000000, "1Mb")
-    run_parallel_clustering(config)
+    run_parallel(config)

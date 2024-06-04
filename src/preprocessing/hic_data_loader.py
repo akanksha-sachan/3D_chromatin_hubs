@@ -1,4 +1,4 @@
-1######### CONTACT MATRIX (.hic/.mcool) -> EDGELIST (HDF5) of graph #########
+1  ######### CONTACT MATRIX (.hic/.mcool) -> EDGELIST (HDF5) of graph #########
 ######### Calling loops, compartments and TADs #########
 ######### Creating edge lists of local and global interactions; plotting edge_reliabilities #########
 
@@ -18,6 +18,7 @@ import pandas as pd
 import pyBigWig
 from memory_profiler import profile
 from scipy.sparse import csr_matrix
+import scipy.stats as stats
 from sklearn.decomposition import PCA
 
 # add the parent directory of 'src' to the sys.path
@@ -33,6 +34,7 @@ except ImportError:
     from utils import *
 
 ############ Query Hic data and call 3D genomic features to create HDF5 edgelist object ############
+
 
 class Query:
     """
@@ -241,7 +243,9 @@ class HiCQuery(Query):
             whole_genome_bins_bed = config.paths.ref_genome_bins
             self.bins_wg = pd.read_csv(whole_genome_bins_bed, sep="\t", header=None)
             self.bins_wg.columns = ["chrom", "start", "end"]
-            self.bins_chr = self.bins_wg[self.bins_wg["chrom"] == self.parent.chrom] #chrom start end for the current chrom
+            self.bins_chr = self.bins_wg[
+                self.bins_wg["chrom"] == self.parent.chrom
+            ]  # chrom start end for the current chrom
 
         def calculate_ab_score(self, matrix):
             """
@@ -258,30 +262,14 @@ class HiCQuery(Query):
             matrix = np.corrcoef(matrix)
             np.fill_diagonal(matrix, 1)
             matrix[np.isnan(matrix)] = 0.0
-            # 1d matrix transformed using PC1 
+            # 1d matrix transformed using PC1
             pca = PCA(n_components=1)
             projected_matrix = pca.fit_transform(matrix)
-            bin_starts = self.bins_chr["start"].values #create dict {start:pc1}
-            ab_scores = {start: projected_matrix[i, 0] for i, start in enumerate(bin_starts)}
-            return ab_scores
-
-        def ab_score_to_bigwig(bins, e1_values, chromsizes, output_file="e1.bw"):
-            """
-            Save e1 as a bigwig track for one chr
-            """
-
-            e1_values = e1_values.flatten()
-            chroms = bins["chrom"].values
-            chroms = np.array([chroms[i].encode() for i in range(len(chroms))])
-            starts = bins["start"].values.astype(int)
-            ends = bins["end"].values.astype(int)
-            # adding chromsize header to bigwig file
-            bw = pyBigWig.open(output_file, "w")
-            bw.addHeader(list(chromsizes.items()))  # dict of 'chr' and 'size'
-            # adding entries (bulk addition as each chroms, starts, ends, values can be numpy arrays)
-            bw.addEntries(chroms, starts, ends=ends, values=e1_values)
-            bw.close()
-            print(f"BigWig file saved to {output_file}")
+            bin_starts = self.bins_chr["start"].values  # create dict {start:pc1}
+            pc1_scores = {
+                start: projected_matrix[i, 0] for i, start in enumerate(bin_starts)
+            }
+            return pc1_scores
 
         def load_bigwig_chromosomal_ab(self):
             """
@@ -289,7 +277,7 @@ class HiCQuery(Query):
             Fact: NONEs are returned for bins that are centromeric regions or other gaps in epigenetic sequencing data (eg. chrY)
 
             Input: .bed file of hg38 bins at the specified res, bigwig file
-            Returns: a list of A/B classes quantified from bigwig signal for the whole bed file 
+            Returns: a list of A/B classes quantified from bigwig signal for the whole bed file
             """
             bins_chr = self.bins_chr
             # query the bigwig file for the signal
@@ -304,20 +292,56 @@ class HiCQuery(Query):
 
             # map signal to bins and append A/B labels: {start: (signal, a/b label)}
             bed_signal_dict = {}
-            for idx, (start, sig) in enumerate(zip(bins_chr['start'], signal)):
+            for idx, (start, sig) in enumerate(zip(bins_chr["start"], signal)):
                 if sig is None:
                     bed_signal_dict[start] = (sig, None)
                 else:
-                    ab_label = 'A' if sig >= 0 else 'B'
+                    ab_label = "A" if sig >= 0 else "B"
                     bed_signal_dict[start] = (sig, ab_label)
             return bed_signal_dict
 
-        def ab_score_correlation(self, ab_score, bigwig_signal):
+        def ab_score_correlation(self, ab_score_dict, bigwig_signal_dict):
             """
             Reliability: Compare the compartment calls with reference databases using Pearson, spearman, and p-value
             """
-            pass
-
+            #overlap of bins in the bigwig_dict and ab_score_dict
+            common_starts = [
+                start for start in ab_score_dict.keys()
+                if start in bigwig_signal_dict and bigwig_signal_dict[start][0] is not None
+            ]
+            if not common_starts:
+                raise ValueError("No common starts found with valid signals for correlation analysis.")
+            pc1_scores = np.array([ab_score_dict[start] for start in common_starts])
+            bigwig_signals = np.array([bigwig_signal_dict[start][0] for start in common_starts])
+            # Rescale PC1 scores to the range of BigWig signals
+            min_signal, max_signal = bigwig_signals.min(), bigwig_signals.max()
+            pc1_scores_rescaled = np.interp(pc1_scores, (pc1_scores.min(), pc1_scores.max()), (min_signal, max_signal))
+            # Calculate correlations
+            pearson_corr, pearson_p = stats.pearsonr(pc1_scores, bigwig_signals)
+            spearman_corr, spearman_p = stats.spearmanr(pc1_scores, bigwig_signals)
+            # Prepare data for plotting
+            correlation_data = pd.DataFrame({
+                'Mean_AB_Bigwig_Signal': bigwig_signals,
+                'PC1_AB': pc1_scores
+            })
+            return correlation_data, pearson_corr, pearson_p, spearman_corr, spearman_p
+        
+        def ab_score_to_bigwig(bins, pc1_values, chromsizes, output_file="pc1.bw"):
+            """
+            Save pc1 as a bigwig track for one chr for visualisation on the browser
+            """
+            pc1_values = pc1_values.flatten()
+            chroms = bins["chrom"].values
+            chroms = np.array([chroms[i].encode() for i in range(len(chroms))])
+            starts = bins["start"].values.astype(int)
+            ends = bins["end"].values.astype(int)
+            # adding chromsize header to bigwig file
+            bw = pyBigWig.open(output_file, "w")
+            bw.addHeader(list(chromsizes.items()))  # dict of 'chr' and 'size'
+            # adding entries (bulk addition as each chroms, starts, ends, values can be numpy arrays)
+            bw.addEntries(chroms, starts, ends=ends, values=pc1_values)
+            bw.close()
+            print(f"BigWig file saved to {output_file}")
 
     class loop:
         """Nested class for analysis of loops from .hic data"""
@@ -645,8 +669,8 @@ if __name__ == "__main__":
     # whole genome run test
     config = Config()
     chromosomes = config.genomic_params.chromosomes
-    current_res = config.genomic_params.resolutions[0]  
-    current_res_str = config.genomic_params.res_strs[0]  
+    current_res = config.genomic_params.resolutions[0]
+    current_res_str = config.genomic_params.res_strs[0]
 
     # params for OE matrix visualisation
     threshold = 0  # tweak based on single chr viz
@@ -663,4 +687,4 @@ if __name__ == "__main__":
     # whole_genome_edgelist(config, chromosomes, current_res, current_res_str, threshold)
     chrom = chromosomes[0]
     query = HiCQuery(config, chrom, current_res, current_res_str)
-    print(query.ab_comp.load_bigwig_chromosomal_ab()) #249 bins for chr1
+    print(query.ab_comp.load_bigwig_chromosomal_ab())  # 249 bins for chr1

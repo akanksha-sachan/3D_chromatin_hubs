@@ -1,3 +1,3 @@
 """_init.py"""
 
-from .graph_cluster import *
+from .cluster import *
