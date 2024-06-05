@@ -94,8 +94,8 @@ class Config:
         def initialize_loops_paths(self):
             """Initialize paths for Hi-C data inputs and edgelist outputs in bedpe format"""
             self.hiccups_merged_infile = "/work/magroup/asachan2/genomic_hubs/juicer_tools/results/whole_genome_gm12878/merged_loops.bedpe"
-            #self.loops_txt_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/GSE63525_replicate_hg19_HiCCUPS_looplist.txt"
-            #self.loops_bedpe_outfile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/GSE63525_replicate_hg19_HiCCUPS_looplist.bedpe"
+            self.loops_txt_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/GSE63525_replicate_hg19_HiCCUPS_looplist.txt"
+            self.loops_bedpe_outfile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/GSE63525_replicate_hg19_HiCCUPS_looplist.bedpe"
             self.replicate_lifted_loops_infile = f"/work/magroup/asachan2/genomic_hubs/data/{self.cell_type}/4DNData/GSE63525_replicate_hg38liftOver_HiCCUPS_10kb.bedpe"
             self.all_lifted_loops_infile = "/work/magroup/4DN/yang/Rao_et_al/GSE63525_GM12878_primary+replicate_HiCCUPS_looplist_hg38.txt"
         

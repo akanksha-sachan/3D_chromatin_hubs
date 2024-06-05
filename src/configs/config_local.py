@@ -25,6 +25,7 @@ class Config:
                 "10kb"
             ]  # list of strings based on standard naming convention of resolutions
             self.hic_norm = "VC"  # vanilla coverage normalization
+            self.edge_type_key = "oe_intra_0" #oe_intra_0_5 change for every graph type (OE/loop)
             self.chromosomes = [
                 "chr1",
                 "chr2",
@@ -113,4 +114,4 @@ class Config:
 
         def initialize_hub_paths(self):
             """ nodesets of different resolutions stored in hdf5 format """
-            self.edgelist_outfile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/edgelist.h5"
+            self.edgelist_outdir = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/edgelists"

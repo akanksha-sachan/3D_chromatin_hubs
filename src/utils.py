@@ -193,5 +193,5 @@ def inspect_h5_file(file_path):
 if __name__ == "__main__":
     config = Config()
     bedtools_makewindows(
-        config.paths.chrom_sizes_infile, 1000000, config.paths.ref_genome_bins
+        config.paths.chrom_sizes_infile, 100000, config.paths.ref_genome_bins
     )

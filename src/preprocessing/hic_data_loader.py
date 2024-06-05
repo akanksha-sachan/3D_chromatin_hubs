@@ -1,4 +1,4 @@
-1  ######### CONTACT MATRIX (.hic/.mcool) -> EDGELIST (HDF5) of graph #########
+######### CONTACT MATRIX (.hic/.mcool) -> EDGELIST (HDF5) of graph #########
 ######### Calling loops, compartments and TADs #########
 ######### Creating edge lists of local and global interactions; plotting edge_reliabilities #########
 
@@ -583,16 +583,18 @@ class DataLoader(HiCQuery):
         super().__init__(
             config, chrom, res, res_str
         )  # instantiate parent class attributes
-        self.edgelist_outfile = config.paths.edgelist_outfile
+        self.edgelist_outdir = config.paths.edgelist_outdir
 
     def oe_intra_edgelist_single_chr(self, threshold=0, mode="a"):
-        """Save pandas df oe edges in .h5 format"""
+        """Save pandas df oe edges in .h5 format for each chr"""
         oe_intra_df = self.oe_intra_df(threshold)
         thresh_str = str(threshold).replace(".", "_")
-
-        with pd.HDFStore(self.edgelist_outfile, mode=mode) as store:
+        edgelist_outfile = os.path.join(
+            self.edgelist_outdir, f"{self.chrom}.h5"
+        )
+        with pd.HDFStore(edgelist_outfile, mode=mode) as store:
             store.put(
-                f"{self.chrom}/_{self.res_str}/oe_intra_{thresh_str}",
+                f"_{self.res_str}/oe_intra_{thresh_str}",
                 oe_intra_df,
                 format="table",
             )
@@ -600,7 +602,7 @@ class DataLoader(HiCQuery):
     def oe_plot_single_chr(
         self, output_dir_oe_plot, start, end, threshold=0, cmap="bwr", vmin=0, vmax=1
     ):
-        """save whole genome OE plots of a selected region and threshold"""
+        """save whole genome OE plots of a selected region and threshold (only to visualize input map)"""
         oe_numpy_thresholded = self.oe_intra_numpy(start, end, threshold)
         filename = os.path.join(output_dir_oe_plot, f"{self.chrom}_oe_{threshold}.png")
         region_str = format_loci_string(start, end, self.res_str)
@@ -614,20 +616,30 @@ class DataLoader(HiCQuery):
         )
 
 
-def whole_genome_edgelist(config, chromosomes, res, res_str, threshold=0):
+def single_chr_edgelist(chrom, config, res, res_str, threshold):
     """
-    multiprocess methods to run on the whole genome
-    writing to .h5 using multiprocessing requires file locking
+    multiprocess methods this to create separate .h5 files for each chromosome
     """
-    for chrom in chromosomes:  # use for loop to write sequentially to .h5
-        loader = DataLoader(config, chrom, res, res_str)
-        loader.oe_intra_edgelist_single_chr(threshold)
+    loader = DataLoader(config, chrom, res, res_str)
+    loader.oe_intra_edgelist_single_chr(threshold)
 
+def run_parallel_edgelist(config, chromosomes, res, res_str, threshold):
+    """ # multiprocessing on whole genome """
+    with Pool() as pool:
+        pool.map(
+            partial(
+                single_chr_edgelist,
+                config=config,
+                res=res,
+                res_str=res_str,
+                threshold=threshold,
+            ),
+            chromosomes,
+        )
 
 def oe_plots(chrom, config, res, res_str, output_dir_oe_plot, start, end, threshold=0):
     """
     multiprocess to run on the whole genome
-    writing to .h5 using multiprocessing requires file locking
     """
     loader = DataLoader(config, chrom, res, res_str)
     loader.oe_plot_single_chr(
@@ -679,25 +691,13 @@ if __name__ == "__main__":
 
     # directory to save plots
     output_dir_oe_plot = os.path.join(config.paths.temp_dir, f"{current_res_str}_plots/oe_plots_{threshold}")
-    os.makedirs(output_dir_oe_plot, exist_ok=True)
+    os.makedirs(output_dir_oe_plot, exist_ok=True) #create if not exists
     # custom colormap
     REDMAP = LinearSegmentedColormap.from_list("bright_red", [(1, 1, 1), (1, 0, 0)])
 
     # write edgelist file for whole genome
-    #whole_genome_edgelist(config, chromosomes, current_res, current_res_str, threshold)
+    #run_parallel_edgelist(config, chromosomes, current_res, current_res_str, threshold)
     
-    #plot oe
-    run_parallel_oe_plots(
-        config,
-        chromosomes,
-        current_res,
-        current_res_str,
-        output_dir_oe_plot,
-        start,
-        end,
-        threshold,
-    )
-
-    # chrom = chromosomes[0]
-    # query = HiCQuery(config, chrom, current_res, current_res_str)
-    # print(query.ab_comp.load_bigwig_chromosomal_ab())  # 249 bins for chr1
+    chrom = chromosomes[0]
+    query = HiCQuery(config, chrom, current_res, current_res_str)
+    print(query.ab_comp.load_bigwig_chromosomal_ab())  # 249 bins for chr1
