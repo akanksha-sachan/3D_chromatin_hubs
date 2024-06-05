@@ -669,22 +669,35 @@ if __name__ == "__main__":
     # whole genome run test
     config = Config()
     chromosomes = config.genomic_params.chromosomes
-    current_res = config.genomic_params.resolutions[0]
-    current_res_str = config.genomic_params.res_strs[0]
+    current_res = config.current_res
+    current_res_str = config.current_res_str
 
     # params for OE matrix visualisation
-    threshold = 0  # tweak based on single chr viz
-    start = 0
-    end = 72000000
+    threshold = config.genomic_params.threshold  
+    start = config.genomic_params.start
+    end = config.genomic_params.end
 
     # directory to save plots
-    output_dir_oe_plot = os.path.join(config.paths.temp_dir, f"oe_plots_{threshold}")
+    output_dir_oe_plot = os.path.join(config.paths.temp_dir, f"{current_res_str}_plots/oe_plots_{threshold}")
     os.makedirs(output_dir_oe_plot, exist_ok=True)
     # custom colormap
     REDMAP = LinearSegmentedColormap.from_list("bright_red", [(1, 1, 1), (1, 0, 0)])
 
     # write edgelist file for whole genome
-    # whole_genome_edgelist(config, chromosomes, current_res, current_res_str, threshold)
-    chrom = chromosomes[0]
-    query = HiCQuery(config, chrom, current_res, current_res_str)
-    print(query.ab_comp.load_bigwig_chromosomal_ab())  # 249 bins for chr1
+    #whole_genome_edgelist(config, chromosomes, current_res, current_res_str, threshold)
+    
+    #plot oe
+    run_parallel_oe_plots(
+        config,
+        chromosomes,
+        current_res,
+        current_res_str,
+        output_dir_oe_plot,
+        start,
+        end,
+        threshold,
+    )
+
+    # chrom = chromosomes[0]
+    # query = HiCQuery(config, chrom, current_res, current_res_str)
+    # print(query.ab_comp.load_bigwig_chromosomal_ab())  # 249 bins for chr1

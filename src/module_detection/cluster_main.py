@@ -98,7 +98,7 @@ class Graph:
         pass
 
 
-# module detection class
+# module detection class, has spectral clustering rn, can import other methods from scripts later
 class Cluster(Graph):
     """
     spectral clustering on intra chr graph built from
