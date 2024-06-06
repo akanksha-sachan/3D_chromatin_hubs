@@ -24,8 +24,9 @@ class Config:
                 "100kb",
                 "10kb"
             ]  # list of strings based on standard naming convention of resolutions
+            self.affinity_key = f"OE_{self.res_strs[0]}_affinity" #for saving the affinity plots to this folder
             self.hic_norm = "VC"  # vanilla coverage normalization
-            self.edge_type_key = "oe_intra_0" #oe_intra_0_5 change for every graph type (OE/loop)
+            self.nodeset_key = "oe_intra_0" #oe_intra_0_5 change for every graph type (OE/loop)
             self.chromosomes = [
                 "chr1",
                 "chr2",

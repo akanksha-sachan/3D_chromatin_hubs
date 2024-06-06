@@ -14,6 +14,8 @@ import pandas as pd
 from scipy.sparse import csr_matrix
 from sklearn.cluster import SpectralClustering
 from sklearn.decomposition import PCA
+from sklearn.metrics import f1_score, precision_score, recall_score
+import pickle
 
 # add the parent directory of 'src' to the sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -52,6 +54,9 @@ class Graph:
         self.edge_df = None  # extracted df for quick access
         self.nodeset_attrs = None  # {start:(idx, attrs)} : start indicates the genomic loci of the node, and idx is nodeset order
         self.affinity_matrix = None  # affinity matrix to represent constructed graph
+        self.affinity_key = config.genomic_params.affinity_key
+        self.affinity_plot_dir = os.path.join(config.paths.temp_dir, f"affinity_matrices/{self.affinity_key}")
+        os.makedirs(self.affinity_plot_dir, exist_ok=True) #create if not exists
 
     def load_edges(self):
         """extract pandas dataframe dataset for building graph from h5 per chr"""
@@ -60,6 +65,13 @@ class Graph:
         )
         with pd.HDFStore(self.edgelist_h5_infile, mode="r") as store:
             self.edge_df = store[dataset_path]
+
+    def construct_hub_edgelist():
+        """
+        1. find local overlapping nodes in the global nodeset, remove all other global nodes (and non-overlapping local nodes)
+        2. borrow gobal edge between 2 oe nodes and distribute it among the local nodes in a fully connected manner
+        """
+        pass
 
     def edgelist_to_csr_affinity_matrix(self):
         """convert edgelist pandas df graph to a CSR matrix graph (affinity matrix) for clustering"""
@@ -89,13 +101,10 @@ class Graph:
                 shape=(num_nodes, num_nodes),
             )
         )
-
-    def construct_hub_edgelist():
-        """
-        1. find local overlapping nodes in the global nodeset, remove all other global nodes (and non-overlapping local nodes)
-        2. borrow gobal edge between 2 oe nodes and distribute it among the local nodes in a fully connected manner
-        """
-        pass
+        # save affinity matrix to disk as pkl
+        outfile = f"{self.affinity_plot_dir}/{self.chrom}_affinity.pkl"
+        with open(outfile, 'wb') as file:
+            pickle.dump(self.affinity_matrix, file)
 
 
 # module detection class, has spectral clustering rn, can import other methods from scripts later
@@ -134,6 +143,12 @@ class Cluster(Graph):
             for start, set_idx in nodeset_dict.items()
         }
     
+    def save_nodeset_attrs(self):
+        #save the nodeset_attrs to disk as pkl in the same dir as affinity matrix pkl
+        outfile = f"{self.affinity_plot_dir}/{self.chrom}_nodeset_attrs.pkl"
+        with open(outfile, 'wb') as file:
+            pickle.dump(self.nodeset_attrs, file)
+    
     def create_gexf(self):
         """store the clusters in a gexf format for viz"""
         G = nx.Graph()
@@ -154,7 +169,7 @@ class Cluster(Graph):
             G.add_edge(start_x_set_idx, start_y_set_idx, weight=row["counts"])
         # write to gexf
         outfile = (
-            f"{self.graphs_outdir}/{self.query_group_chrom}_{self.query_key_edge}.gexf"
+            f"{self.graphs_outdir}/{self.chrom}_{self.query_key_edge}.gexf"
         )
         nx.write_gexf(G, outfile)
 
@@ -163,34 +178,56 @@ class Cluster(Graph):
 
         def __init__(self, parent):
             self.parent = parent
+            self.metrics_csv_file = os.path.join(parent.config.paths.temp_dir, f"accuracy_metrics_{self.parent.affinity_key}.csv")
     
-        def oe_confusion_matrix(self):
+        def oe_confusion_matrix(self, nodeset_attrs=None):
             """calculate confusion matrix for clustering OE edges using AB compartments as ground truth"""
             query = HiCQuery(self.parent.config, self.parent.chrom, self.parent.current_res, self.parent.current_res_str)
             ab_bed_dict = query.ab_comp.load_bigwig_chromosomal_ab()
             # append the A/B labels to the nodeset_attrs dict by mapping 'start' key to get {start: (set_idx, cluster_label, ab_label)}
-            self.parent.nodeset_attrs = {
+            
+            if self.parent.nodeset_attrs is None:
+                nodeset_attrs = nodeset_attrs
+            else:
+                nodeset_attrs = self.parent.nodeset_attrs
+
+            nodeset_attrs = {
                 start: (set_idx, cluster_label, ab_bed_dict.get(start, (None, None))[1]) #get [1] from (signal, a/b label)
-                for start, (set_idx, cluster_label) in self.parent.nodeset_attrs.items()
+                for start, (set_idx, cluster_label) in nodeset_attrs.items()
             }
             #get the confusion matrix between cluster_labels as predicted and ab_labels as ground truth
-            cluster_labels = np.array([cluster_label for _, (_, cluster_label, _) in self.parent.nodeset_attrs.items()])
-            ab_labels = np.array([ab_label for _, (_, _, ab_label) in self.parent.nodeset_attrs.items()])
+            cluster_labels = np.array([cluster_label for _, (_, cluster_label, _) in nodeset_attrs.items()])
+            ab_labels = np.array([ab_label for _, (_, _, ab_label) in nodeset_attrs.items()])
             mapped_ab_labels = np.where(ab_labels == 'A', 0, 1) #map A to 0 and B to 1
-            confusion_matrix = np.zeros((2, 2))
+            self.confusion_matrix = np.zeros((2, 2))
             for i in range(2):
                 for j in range(2):
-                    confusion_matrix[i, j] = np.sum((cluster_labels == i) & (mapped_ab_labels == j))
-            return confusion_matrix 
+                    self.confusion_matrix[i, j] = np.sum((cluster_labels == i) & (mapped_ab_labels == j))
+            return self.confusion_matrix 
         
         def accuracy_metrics_single_chr(self):
             """calculate accuracy metrics (F1 score from the confusion matrix) for single chromosomal clustering"""
-            pass
+            confusion_matrix = self.confusion_matrix.astype(int)
+            true_labels = np.concatenate([[0] * confusion_matrix[0, 0], [1] * confusion_matrix[0, 1],
+                                        [0] * confusion_matrix[1, 0], [1] * confusion_matrix[1, 1]])
+            pred_labels = np.concatenate([[0] * confusion_matrix[0, 0], [0] * confusion_matrix[0, 1],
+                                        [1] * confusion_matrix[1, 0], [1] * confusion_matrix[1, 1]])
 
-        ## hub physical properties
-        def cluster_size_distribution_single_chr(self):
-                """calculate cluster size distribution split between number of clusters"""
-                pass
+            precision = precision_score(true_labels, pred_labels)
+            recall = recall_score(true_labels, pred_labels)
+            f1 = f1_score(true_labels, pred_labels)
+
+            accuracy_metrics_dict = {
+            'chrom': self.parent.chrom,
+            'precision': precision,
+            'recall': recall,
+            'f1': f1
+        }
+
+            df = pd.DataFrame([accuracy_metrics_dict])
+            df.to_csv(self.metrics_csv_file, mode='a', header=not os.path.exists(self.metrics_csv_file), index=False)
+
+            return (precision, recall, f1)
         
         ## overlapping node annotations
         def overlap_genes_to_nodeset(self):
@@ -205,11 +242,10 @@ class Cluster(Graph):
 
 def run_single_chrom(chrom, config, res, res_str, nodeset_key):
     """perform spectral clustering on single intra-chromosomal graph"""
-    modules = Cluster(config, chrom, res, res_str, nodeset_key, n_clusters=2)
-    modules.spectral_clustering()
-    #modules.create_gexf()
-    conf_mtx = modules.evaluation.oe_confusion_matrix()
-    return conf_mtx
+    modules = Cluster(config, chrom, res, res_str, nodeset_key, n_clusters=2) #initializes graph object as well
+    modules.spectral_clustering() 
+    modules.save_nodeset_attrs() #gives nodeset_attrs as pkl in the affinity matrix dir
+    modules.create_gexf() #gives graph objects
 
 def run_parallel(config):
     """run spectral clustering on all chromosomes in parallel"""
@@ -220,22 +256,36 @@ def run_parallel(config):
                 config=config,
                 res = config.current_res,
                 res_str=config.current_res_str,
+                nodeset_key=config.genomic_params.nodeset_key
             ),
             config.genomic_params.chromosomes,
         )
 
+def run_single_chrom_eval(chrom, config, res, res_str, nodeset_key):
+    """use for loop for evaluation, multiprocessing this gives errors"""
+    modules = Cluster(config, chrom, res, res_str, nodeset_key, n_clusters=2) #initializes graph object as well
+    modules.spectral_clustering() 
+    modules.save_nodeset_attrs() #gives nodeset_attrs as pkl in the affinity matrix dir
+    #modules.create_gexf() #gives graph objects
+    conf_mtx = modules.evaluation.oe_confusion_matrix()
+    accuracy_metrics_tuple = modules.evaluation.accuracy_metrics_single_chr()
+    return conf_mtx, accuracy_metrics_tuple
+
 def whole_genome_evaluation(config):
     """calculate evaluation metrics for whole genome together"""
-    pass
+    for chrom in config.genomic_params.chromosomes:
+        _ , accuracy_metrics_tuple = run_single_chrom_eval(chrom, config, config.current_res, config.current_res_str, config.genomic_params.nodeset_key)
+        print(f"Chrom: {chrom}, Accuracy Metrics: {accuracy_metrics_tuple}")
 
 if __name__ == "__main__":
 
     config = Config()
-    chromosomes = config.genomic_params.chromosomes
-    current_res = config.current_res
-    current_res_str = config.current_res_str
-    current_chrom = chromosomes[0]
-    nodeset_key = config.genomic_params.edge_type_key
-    conf_mtx = run_single_chrom(current_chrom, config, current_res, current_res_str, nodeset_key)
-    print(conf_mtx)
+    # chromosomes = config.genomic_params.chromosomes
+    # current_res = config.current_res
+    # current_res_str = config.current_res_str
+    # current_chrom = chromosomes[0]
+    # nodeset_key = config.genomic_params.nodeset_key
+    # conf_mtx = run_single_chrom(current_chrom, config, current_res, current_res_str, nodeset_key)
+    # print(conf_mtx)
     #run_parallel(config)
+    whole_genome_evaluation(config)

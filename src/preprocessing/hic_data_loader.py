@@ -698,6 +698,18 @@ if __name__ == "__main__":
     # write edgelist file for whole genome
     #run_parallel_edgelist(config, chromosomes, current_res, current_res_str, threshold)
     
-    chrom = chromosomes[0]
-    query = HiCQuery(config, chrom, current_res, current_res_str)
-    print(query.ab_comp.load_bigwig_chromosomal_ab())  # 249 bins for chr1
+    #get oe plots
+    run_parallel_oe_plots(
+        config,
+        chromosomes,
+        current_res,
+        current_res_str,
+        output_dir_oe_plot,
+        start,
+        end,
+        threshold,
+    )
+    
+    # chrom = chromosomes[0]
+    # query = HiCQuery(config, chrom, current_res, current_res_str)
+    # print(query.ab_comp.load_bigwig_chromosomal_ab())  # 249 bins for chr1
