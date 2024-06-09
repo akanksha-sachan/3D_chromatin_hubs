@@ -8,8 +8,8 @@ class Config:
         self.genomic_params = self.genomic_params()
         #set currents for runs
         self.current_cell_type = self.genomic_params.cell_types[0]
-        self.current_res_str = self.genomic_params.res_strs[0]
-        self.current_res = self.genomic_params.resolutions[0]
+        self.current_res_str = self.genomic_params.res_strs[1]
+        self.current_res = self.genomic_params.resolutions[1]
         self.paths = self.paths(self.current_cell_type, self.current_res_str)
     
     class genomic_params:
@@ -24,6 +24,7 @@ class Config:
                 "100kb",
                 "10kb"
             ]  # list of strings based on standard naming convention of resolutions
+            self.affinity_key = f"OE_{self.res_strs[1]}_affinity" #for saving the affinity plots to this folder
             self.hic_norm = "VC"  # vanilla coverage normalization
             self.chromosomes = [
                 "chr1",
@@ -54,9 +55,9 @@ class Config:
             self.oe_matrix_viz()
         
         def oe_matrix_viz(self):
-            self.threshold = 0 # threshold for observed over expected matrix query of edges; tweak based on single chr viz
+            self.threshold = 0.9 # threshold for observed over expected matrix query of edges; tweak based on single chr viz
             self.start = 0 # start index for OE numpy slice for visualization
-            self.end = 72000000 # end index for OE numpy slice for visualization
+            self.end = 30000000 # end index for OE numpy slice for visualization
 
     class paths:
         """Nested class to store input file paths"""
@@ -102,6 +103,7 @@ class Config:
         def initialize_bigwig_paths(self):
             """Initialize paths for bigwigs"""
             self.compartments_infile = f"/work/magroup/asachan2/genomic_hubs/data/{self.cell_type}/4DNData/4DNFIDPK7WFE_compartments.bw"
+            self.insulation_infile = f"/work/magroup/asachan2/genomic_hubs/data/{self.cell_type}/4DNData/4DNFI62JTGEX_insulation.bw" #cooltools created file
 
         def initialize_tool_paths(self):
             """Initialize paths for other tools used in pipeline"""
