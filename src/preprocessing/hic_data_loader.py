@@ -36,10 +36,12 @@ except ImportError:
 ############ Query Hic data and call 3D genomic features to create HDF5 edgelist object ############
 
 
-class Query:
+class HiCQuery:
     """
-    Base class for querying both .mcool/.hic files for observed, OE counts, edges (not needed if only using .hic as input)
-    Inherit: to return egdelist as hdf5 with local and global interactions
+    Querying .hic files for observed and OE counts
+
+    Raises:
+        ValueError: If queried resolution not found
     """
 
     def __init__(self, config, chrom, res, res_str):
@@ -50,18 +52,6 @@ class Query:
         self.chrom = chrom
         self.res = res
         self.res_str = res_str
-
-
-class HiCQuery(Query):
-    """
-    Querying .hic files for observed and OE counts
-
-    Raises:
-        ValueError: If queried resolution not found
-    """
-
-    def __init__(self, config, chrom, res, res_str):
-        super().__init__(config, chrom, res, res_str)  # instantiate parent class
         self.hic_file = config.paths.hic_infile  # path to .hic file
         self.hic_norm = config.genomic_params.hic_norm  # normalization method to query
         self.hic = hicstraw.HiCFile(self.hic_file)  # hic object from straw
@@ -554,22 +544,6 @@ class HiCQuery(Query):
             bw.addEntries(chroms, starts, ends=ends, values=ins_values)
             bw.close()
             print(f"BigWig file saved to {output_file}")
-
-
-class McoolQuery(Query):
-    """
-    Querying .mcool files for observed and OE counts/ and getting ab.bw correlated with 4dn data-portal higlass viz
-
-    Raises:
-        ValueError: If queried resolution not found
-    """
-
-
-    def __init__(self, config):
-        super().__init__(config)  # instantiate parent class
-        self.mcool_file = config.paths.cool_infile  # path to .mcool file
-        self.mcool = cooler.Cooler(self.mcool_file)  # cooler object from cooler
-        print("Mcool file loaded")
 
 
 class DataLoader(HiCQuery):

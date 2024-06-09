@@ -102,7 +102,8 @@ class Config:
         
         def initialize_bigwig_paths(self):
             """Initialize paths for bigwigs"""
-            self.compartments_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/4DNFIDPK7WFE_compartments.bw"
+            self.compartments_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/4DNFIDPK7WFE_compartments.bw" #cooltools created file
+            self.insulation_infile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/data/{self.cell_type}/4DNData/4DNFI62JTGEX_insulation.bw" #cooltools created file
 
         def initialize_tool_paths(self):
             """Initialize paths for other tools used in pipeline"""
