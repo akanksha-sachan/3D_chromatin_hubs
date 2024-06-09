@@ -1,5 +1,5 @@
-######### CONTACT MATRIX (.hic/.mcool) -> EDGELIST (HDF5) of graph #########
-######### Calling loops, compartments and TADs #########
+######### CONTACT MATRIX (.hic) -> EDGELIST (HDF5) of graph #########
+######### DEBUG: Calling loops, compartments and TADs : emulate juicertools code for these canonical features #########
 ######### Creating edge lists of local and global interactions; plotting edge_reliabilities #########
 
 ##TODO: fix variables from chrom 2 currents
@@ -253,6 +253,7 @@ class HiCQuery(Query):
 
             Input: OE matrix (csr/numpy)
             Output: A/B compartment calls
+            #GT code: JUICER TOOLS
             """
 
             matrix = matrix.toarray()
@@ -555,20 +556,20 @@ class HiCQuery(Query):
             print(f"BigWig file saved to {output_file}")
 
 
-# class McoolQuery(Query):
-#     """
-#     Querying .mcool files for observed and OE counts
+class McoolQuery(Query):
+    """
+    Querying .mcool files for observed and OE counts/ and getting ab.bw correlated with 4dn data-portal higlass viz
 
-#     Raises:
-#         ValueError: If queried resolution not found
-#     """
+    Raises:
+        ValueError: If queried resolution not found
+    """
 
 
-#     def __init__(self, config):
-#         super().__init__(config)  # instantiate parent class
-#         self.mcool_file = config.paths.mcool_file  # path to .mcool file
-#         self.mcool = cooler.Cooler(self.mcool_file)  # cooler object from cooler
-#         print("Mcool file loaded")
+    def __init__(self, config):
+        super().__init__(config)  # instantiate parent class
+        self.mcool_file = config.paths.cool_infile  # path to .mcool file
+        self.mcool = cooler.Cooler(self.mcool_file)  # cooler object from cooler
+        print("Mcool file loaded")
 
 
 class DataLoader(HiCQuery):
