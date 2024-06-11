@@ -239,13 +239,8 @@ class HiCQuery:
 
         def calculate_ab_score(self, matrix):
             """
-            Raw -> normalised (VC) -> O/E -> Pearson -> PCA gives A/B
-
-            Input: OE matrix (csr/numpy)
-            Output: A/B compartment calls
-            #GT code: JUICER TOOLS
+            #GT code: COOL TOOLS
             """
-
             matrix = matrix.toarray()
             # ensure diagonals are 1
             np.fill_diagonal(matrix, 1)
