@@ -20,7 +20,7 @@ try:
 except ImportError:
     from configs.config_local import Config
 
-
+##### COMPARTMENT RELATED UTILS #####
 def oe_from_cooler(obs_numpy_matrix, threshold=1):
     """
     The O/E matrix is calculated as the log2 ratio of the raw contact matrix to the expected contact matrix.
@@ -65,7 +65,26 @@ def oe_from_cooler(obs_numpy_matrix, threshold=1):
     )
     return obs_over_expected, obs_over_expected_filtered, expected_matrix, sums
 
+def sqrt_norm(matrix):
+    """ Normalize the matrix by the square root of the sum of the matrix along the last axis"""
+    coverage = (np.sqrt(np.sum(matrix, axis=-1)))
+    with np.errstate(divide='ignore', invalid='ignore'):
+        matrix = matrix / coverage.reshape((-1, 1))
+        matrix = matrix / coverage.reshape((1, -1))
+    matrix[np.isnan(matrix)] = 0.0
+    matrix[np.isinf(matrix)] = 0.0
+    return matrix
 
+def kth_diag_indices(a, k):
+	rows, cols = np.diag_indices_from(a)
+	if k < 0:
+		return rows[-k:], cols[:k]
+	elif k > 0:
+		return rows[:-k], cols[k:]
+	else:
+		return rows, cols
+
+##### HELPER UTILS #####
 def bedtools_makewindows(chromsizes_file, res, outfile):
     """runs this command: $ bedtools makewindows -g hg19.txt -w 1000000
     can add additional if statements to be able to run -b input.bed and -n 10 command
@@ -86,7 +105,6 @@ def bedtools_makewindows(chromsizes_file, res, outfile):
     else:
         print(f"Error creating bins file: {outfile}. Error: {process.stderr}")
 
-
 def read_null_terminated_string(binary_file) -> str:
     """
     Read null terminated string from a binary file
@@ -105,7 +123,6 @@ def read_null_terminated_string(binary_file) -> str:
 
         string_buffer += decoded_byte
 
-
 def gen_coords_to_bin_index(gen_coords, res):
     """
     Convert genomic coordinates (base pairs) to bin positions (indices used in matrix representation) of a given resolution
@@ -120,7 +137,6 @@ def gen_coords_to_bin_index(gen_coords, res):
     for index, coord in enumerate(gen_coords):
         region_indices[index] = coord // res
     return region_indices
-
 
 def standardize_chromosome(input_chrom, chrom_keys):
     """
@@ -142,7 +158,6 @@ def standardize_chromosome(input_chrom, chrom_keys):
     # If no match found, return None or raise an error
     return None
 
-
 def format_loci_string(start, end, resolution_str):
     if "Mb" in resolution_str:
         start_unit = start // 1_000_000
@@ -158,8 +173,6 @@ def format_loci_string(start, end, resolution_str):
         unit = "bp"
     return f"{start_unit}-{end_unit}{unit}"
 
-
-# Helper function for plotting
 def plot_hic_map(dense_matrix, cmap, vmin=0, vmax=30, filename=None, title=""):
     d2 = dense_matrix
     d2[np.isnan(d2)] = 0
@@ -169,7 +182,6 @@ def plot_hic_map(dense_matrix, cmap, vmin=0, vmax=30, filename=None, title=""):
     if filename:
         plt.savefig(filename)
     plt.close()
-
 
 def inspect_h5_file(file_path):
     with h5py.File(file_path, "r") as f:

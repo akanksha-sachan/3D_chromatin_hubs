@@ -239,10 +239,12 @@ class HiCQuery:
 
         def calculate_ab_score(self, matrix):
             """
+            Input:  
             #GT code: COOL TOOLS
             """
-            matrix = matrix.toarray()
-            # ensure diagonals are 1
+            matrix = matrix.toarray() #raw straw csr matirx
+            matrix = sqrt_norm(matrix)
+            # ensure diagonals are 1 to ignore it
             np.fill_diagonal(matrix, 1)
             # get pearson matrix
             matrix = np.corrcoef(matrix)
