@@ -291,30 +291,59 @@ class HiCQuery:
                     bed_signal_dict[start] = (sig, ab_label)
             return bed_signal_dict
 
-        def ab_score_correlation(self, ab_score_dict, bigwig_signal_dict):
+        def ab_score_correlation(self, ab_scores, bigwig_signals):
             """
-            Reliability: Compare the compartment calls with reference databases using Pearson, spearman, and p-value
+            Calculate Pearson and Spearman correlations between two lists or dicts of A/B scores and BigWig signals.
+
+            Parameters:
+            ab_scores: list, dict
+                List or dictionary of A/B scores.
+            bigwig_signals: list, dict
+                List or dictionary of BigWig signals.
+
+            Returns:
+            correlation_data: DataFrame
+                DataFrame containing the correlation data.
+            pearson_corr: float
+                Pearson correlation coefficient.
+            pearson_p: float
+                p-value for the Pearson correlation.
+            spearman_corr: float
+                Spearman correlation coefficient.
+            spearman_p: float
+                p-value for the Spearman correlation.
             """
-            #overlap of bins in the bigwig_dict and ab_score_dict
-            common_starts = [
-                start for start in ab_score_dict.keys()
-                if start in bigwig_signal_dict and bigwig_signal_dict[start][0] is not None
-            ]
-            if not common_starts:
-                raise ValueError("No common starts found with valid signals for correlation analysis.")
-            pc1_scores = np.array([ab_score_dict[start] for start in common_starts])
-            bigwig_signals = np.array([bigwig_signal_dict[start][0] for start in common_starts])
-            # Rescale PC1 scores to the range of BigWig signals
-            min_signal, max_signal = bigwig_signals.min(), bigwig_signals.max()
-            pc1_scores_rescaled = np.interp(pc1_scores, (pc1_scores.min(), pc1_scores.max()), (min_signal, max_signal))
+            #Handle dict or list input
+            if isinstance(ab_scores, dict) and isinstance(bigwig_signals, dict):
+                common_starts = [
+                    start for start in ab_scores.keys()
+                    if start in bigwig_signals and bigwig_signals[start][0] is not None
+                ]
+                if not common_starts:
+                    raise ValueError("No common starts found with valid signals for correlation analysis.")
+                ab_scores_list = np.array([ab_scores[start] for start in common_starts])
+                bigwig_signals_list = np.array([bigwig_signals[start][0] for start in common_starts])
+            else:
+                if len(ab_scores) != len(bigwig_signals):
+                    raise ValueError("Input lists must have the same length.")
+                ab_scores_list = np.array(ab_scores, dtype=float)
+                bigwig_signals_list = np.array(bigwig_signals, dtype=float)
+
+            # Remove NaN values
+            valid_indices = ~np.isnan(ab_scores_list) & ~np.isnan(bigwig_signals_list)
+            ab_scores_list = ab_scores_list[valid_indices]
+            bigwig_signals_list = bigwig_signals_list[valid_indices]
+
             # Calculate correlations
-            pearson_corr, pearson_p = stats.pearsonr(pc1_scores, bigwig_signals)
-            spearman_corr, spearman_p = stats.spearmanr(pc1_scores, bigwig_signals)
+            pearson_corr, pearson_p = stats.pearsonr(ab_scores_list, bigwig_signals_list)
+            spearman_corr, spearman_p = stats.spearmanr(ab_scores_list, bigwig_signals_list)
+
             # Prepare data for plotting
             correlation_data = pd.DataFrame({
-                'Mean_AB_Bigwig_Signal': bigwig_signals,
-                'PC1_AB': pc1_scores
+                'Mean_AB_Bigwig_Signal': bigwig_signals_list,
+                'PC1_AB': ab_scores_list
             })
+
             return correlation_data, pearson_corr, pearson_p, spearman_corr, spearman_p
         
         def ab_score_to_bigwig(bins, pc1_values, chromsizes, output_file="pc1.bw"):

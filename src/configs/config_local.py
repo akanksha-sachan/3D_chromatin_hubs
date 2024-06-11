@@ -8,8 +8,8 @@ class Config:
         self.genomic_params = self.genomic_params()
         #set currents for runs
         self.current_cell_type = self.genomic_params.cell_types[0]
-        self.current_res_str = self.genomic_params.res_strs[0]
-        self.current_res = self.genomic_params.resolutions[0]
+        self.current_res_str = self.genomic_params.res_strs[1]
+        self.current_res = self.genomic_params.resolutions[1]
         self.paths = self.paths(self.current_cell_type, self.current_res_str)
     
     class genomic_params:
@@ -18,13 +18,14 @@ class Config:
         def __init__(self):
             self.cell_types = ["GM12878", "K562"]
             self.ref_genome = "hg38"  # used to read paths dynamically in config file
-            self.resolutions = [1000000, 100000, 10000]  # list of integers to query
+            self.resolutions = [1000000, 500000, 100000, 10000]  # list of integers to query
             self.res_strs = [
                 "1Mb",
+                "500kb",
                 "100kb",
                 "10kb"
             ]  # list of strings based on standard naming convention of resolutions
-            self.affinity_key = f"OE_{self.res_strs[0]}_affinity" #for saving the affinity plots to this folder
+            self.affinity_key = f"OE_{self.res_strs[1]}_affinity" #for saving the affinity plots to this folder
             self.hic_norm = "VC"  # vanilla coverage normalization
             self.nodeset_key = "oe_intra_0" #oe_intra_0_5 change for every graph type (OE/loop)
             self.chromosomes = [
@@ -108,6 +109,7 @@ class Config:
         def initialize_tool_paths(self):
             """Initialize paths for other tools used in pipeline"""
             self.juicer_tools = "/Users/Akanksha/MaGroup/Genomic Hubs/workflow/juicer_tools/juicer_tools_1.19.02.jar"
+            self.juicer_ab_outfile = f"/Users/Akanksha/MaGroup/Genomic Hubs/workflow/tmp/{self.cell_type}/pc_one_{self.res_str}.txt"
 
         def initialize_temp_paths(self):
             """Initialize paths for temporary files"""
