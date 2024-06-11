@@ -19,7 +19,12 @@ import pyBigWig
 from memory_profiler import profile
 from scipy.sparse import csr_matrix
 import scipy.stats as stats
+try:
+    from scipy.stats import PearsonRConstantInputWarning
+except ImportError:
+    from scipy.stats import ConstantInputWarning as PearsonRConstantInputWarning
 from sklearn.decomposition import PCA
+import warnings
 
 # add the parent directory of 'src' to the sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -116,9 +121,9 @@ class HiCQuery:
         return hic_header
 
     @profile
-    def observed_intra(self):
+    def observed_intra(self, threshold=0):
         """
-        returns csr sparse matrix of contact records for one chromosome
+        returns observed contact records for one chromosome
         straw object : .binX [0] .binY [1] .counts [2] as attributes
         """
         chrom = self.chrom[3:]
@@ -126,12 +131,14 @@ class HiCQuery:
         observed_list = hicstraw.straw(
             "observed", self.hic_norm, self.hic_file, chrom, chrom, "BP", res
         )
+        if threshold != 0:
+            observed_list = [record for record in observed_list if record.counts >= threshold]
         return observed_list
 
     @profile
     def oe_intra(self, threshold=0):
         """
-        returns contact records for one chromosome as straw object, thresholded if needed
+        returns oe contact records for one chromosome as straw object, thresholded if needed
         straw object : .binX [0] .binY [1] .counts [2] as attributes of list
         """
         chrom = self.chrom[3:]
@@ -200,12 +207,18 @@ class HiCQuery:
         return df
 
     @profile
-    def oe_straw_to_csr(self, threshold=0):
+    def records_as_csr(self, contact='observed', threshold=0):
         """
         Convert straw object to csr matrix
         """
         res = self.res
-        straw_obj = self.oe_intra(threshold)
+        if contact == 'oe':
+            straw_obj = self.oe_intra(threshold)
+        elif contact == 'observed':
+            straw_obj = self.observed_intra(threshold)
+        else:
+            raise ValueError("Invalid contact type. Use 'observed' or 'oe'.")
+
         # convert to numpy
         straw_array = np.array(
             [(i.binX, i.binY, i.counts) for i in straw_obj],
@@ -237,26 +250,34 @@ class HiCQuery:
                 self.bins_wg["chrom"] == self.parent.chrom
             ]  # chrom start end for the current chrom
 
-        def calculate_ab_score(self, matrix):
+        def calculate_ab_score_from_raw(self, matrix, expected=None):
             """
-            Input:  
-            #GT code: COOL TOOLS
+            Input: csr raw counts
+            Output: 1D signal dict of A/B scores
             """
             matrix = matrix.toarray() #raw straw csr matirx
-            matrix = sqrt_norm(matrix)
-            # ensure diagonals are 1 to ignore it
-            np.fill_diagonal(matrix, 1)
+            mask = matrix.sum(axis=0) > 0 #mask out the centromeric bins, as they have column sum of data = 0
+            matrix = sqrt_norm(matrix) #normalise the raw matrix
+            matrix = oe(matrix, expected) #observed over expected matrix
+            np.fill_diagonal(matrix, 1) # ensure diagonals are 1 to ignore it
+            matrix = matrix[mask, :][:, mask] #apply mask
             # get pearson matrix
-            matrix = np.corrcoef(matrix)
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore", category=PearsonRConstantInputWarning
+                    )
+                matrix = pearson(matrix)
             np.fill_diagonal(matrix, 1)
             matrix[np.isnan(matrix)] = 0.0
-            # 1d matrix transformed using PC1
             pca = PCA(n_components=1)
-            projected_matrix = pca.fit_transform(matrix)
+            projected_matrix = pca.fit_transform(matrix) # 1d matrix transformed using PC1
+            
+            #ouput dict of ab_scores
             bin_starts = self.bins_chr["start"].values  # create dict {start:pc1}
-            pc1_scores = {
-                start: projected_matrix[i, 0] for i, start in enumerate(bin_starts)
-            }
+            pc1_scores = {start: None for start in bin_starts} # initialise with None
+            unmasked_bin_starts = bin_starts[mask]
+            for i, start in enumerate(unmasked_bin_starts):
+                pc1_scores[start] = projected_matrix[i, 0]
             return pc1_scores
 
         def load_bigwig_chromosomal_ab(self):

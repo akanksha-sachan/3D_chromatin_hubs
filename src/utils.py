@@ -65,6 +65,23 @@ def oe_from_cooler(obs_numpy_matrix, threshold=1):
     )
     return obs_over_expected, obs_over_expected_filtered, expected_matrix, sums
 
+#Code adapted from Higashi
+def oe(matrix, expected = None):
+	new_matrix = np.zeros_like(matrix)
+	for k in range(len(matrix)):
+		rows, cols = kth_diag_indices(matrix, k)
+		diag = np.diag(matrix,k)
+		if expected is not None:
+			expect = expected[k]
+		else:
+			expect = np.sum(diag) / (np.sum(diag != 0.0) + 1e-15)
+		if expect == 0:
+			new_matrix[rows, cols] = 0.0
+		else:
+			new_matrix[rows, cols] = diag / (expect)
+	new_matrix = new_matrix + new_matrix.T
+	return new_matrix
+
 def sqrt_norm(matrix):
     """ Normalize the matrix by the square root of the sum of the matrix along the last axis"""
     coverage = (np.sqrt(np.sum(matrix, axis=-1)))
@@ -74,6 +91,9 @@ def sqrt_norm(matrix):
     matrix[np.isnan(matrix)] = 0.0
     matrix[np.isinf(matrix)] = 0.0
     return matrix
+
+def pearson(matrix):
+	return np.corrcoef(matrix)
 
 def kth_diag_indices(a, k):
 	rows, cols = np.diag_indices_from(a)
