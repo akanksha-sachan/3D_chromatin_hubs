@@ -250,12 +250,13 @@ class HiCQuery:
                 self.bins_wg["chrom"] == self.parent.chrom
             ]  # chrom start end for the current chrom
 
-        def calculate_ab_score_from_raw(self, matrix, expected=None):
+        def calc_ab_score_from_obs(self, matrix, expected=None):
             """
-            Input: csr raw counts
+            Flow: VC normalised observed records from straw -> mask centromeric regions -> normalise (sqrt) -> OE -> Pearson -> PC1
+            Input: csr observed counts
             Output: 1D signal dict of A/B scores
             """
-            matrix = matrix.toarray() #raw straw csr matirx
+            matrix = matrix.toarray() #observed straw csr matirx
             mask = matrix.sum(axis=0) > 0 #mask out the centromeric bins, as they have column sum of data = 0
             matrix = sqrt_norm(matrix) #normalise the raw matrix
             matrix = oe(matrix, expected) #observed over expected matrix
@@ -279,11 +280,35 @@ class HiCQuery:
             for i, start in enumerate(unmasked_bin_starts):
                 pc1_scores[start] = projected_matrix[i, 0]
             return pc1_scores
+        
+        def assign_ab_compartments(self, pc1_scores, threshold=0):
+            """
+            Assign A/B compartments based on PC1 scores using phasing track such as GC content
+            """
+            pass
+        
+        def ab_score_to_bigwig(bins, pc1_values, chromsizes, output_file="pc1.bw"):
+            """
+            Save pc1 as a bigwig track for one chr for visualisation on the browser
+            """
+            pc1_values = pc1_values.flatten()
+            chroms = bins["chrom"].values
+            chroms = np.array([chroms[i].encode() for i in range(len(chroms))])
+            starts = bins["start"].values.astype(int)
+            ends = bins["end"].values.astype(int)
+            # adding chromsize header to bigwig file
+            bw = pyBigWig.open(output_file, "w")
+            bw.addHeader(list(chromsizes.items()))  # dict of 'chr' and 'size'
+            # adding entries (bulk addition as each chroms, starts, ends, values can be numpy arrays)
+            bw.addEntries(chroms, starts, ends=ends, values=pc1_values)
+            bw.close()
+            print(f"BigWig file saved to {output_file}")
 
-        def load_bigwig_chromosomal_ab(self):
+        def load_bigwig_ab(self):
             """
             Get AB score from GEO as ground truth; bigwig files have multiple zoom levels, some match the resolution of hic data
             Fact: NONEs are returned for bins that are centromeric regions or other gaps in epigenetic sequencing data (eg. chrY)
+            Assumption: 4DN file already has correlation with phasing track hence + = A and - = B
 
             Input: .bed file of hg38 bins at the specified res, bigwig file
             Returns: a list of A/B classes quantified from bigwig signal for the whole bed file
@@ -305,7 +330,7 @@ class HiCQuery:
                 if sig is None:
                     bed_signal_dict[start] = (sig, None)
                 else:
-                    ab_label = "A" if sig >= 0 else "B"
+                    ab_label = "A" if sig >= 0 else "B" 
                     bed_signal_dict[start] = (sig, ab_label)
             return bed_signal_dict
 
@@ -364,11 +389,48 @@ class HiCQuery:
 
             return correlation_data, pearson_corr, pearson_p, spearman_corr, spearman_p
         
-        def ab_score_to_bigwig(bins, pc1_values, chromsizes, output_file="pc1.bw"):
+    class tad:
+        """Nested class for insulation score calculation from .hic data"""
+
+        def __init__(self, parent, config):
+            self.parent = parent
+
+        def calc_insulation_score(self, m, windowsize=500000, res=10000):
             """
-            Save pc1 as a bigwig track for one chr for visualisation on the browser
+            needs <10kb bin size to detect tads using diamond score method and >100M total filtered reads mapped to the genome
             """
-            pc1_values = pc1_values.flatten()
+            windowsize_bin = int(windowsize / res)
+            m = np.nan_to_num(m)
+            score = np.ones((m.shape[0]))
+            for i in range(0, m.shape[0]):
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    v = np.sum(
+                        m[
+                            max(0, i - windowsize_bin) : i,
+                            i + 1 : min(m.shape[0] - 1, i + windowsize_bin + 1),
+                        ]
+                    ) / (
+                        np.sum(
+                            m[
+                                max(0, i - windowsize_bin) : min(
+                                    m.shape[0], i + windowsize_bin + 1
+                                ),
+                                max(0, i - windowsize_bin) : min(
+                                    m.shape[0], i + windowsize_bin + 1
+                                ),
+                            ]
+                        )
+                    )
+                    if np.isnan(v):
+                        v = 1.0
+                score[i] = v
+            # get log2 of the score
+            # score[score == 0] = 1
+            # score = np.log2(score)
+            return score
+
+        def insulation_score_to_bigwig(bins, ins_values, chromsizes, output_file="ins.bw"):
+            ins_values = ins_values.flatten()
             chroms = bins["chrom"].values
             chroms = np.array([chroms[i].encode() for i in range(len(chroms))])
             starts = bins["start"].values.astype(int)
@@ -377,9 +439,15 @@ class HiCQuery:
             bw = pyBigWig.open(output_file, "w")
             bw.addHeader(list(chromsizes.items()))  # dict of 'chr' and 'size'
             # adding entries (bulk addition as each chroms, starts, ends, values can be numpy arrays)
-            bw.addEntries(chroms, starts, ends=ends, values=pc1_values)
+            bw.addEntries(chroms, starts, ends=ends, values=ins_values)
             bw.close()
             print(f"BigWig file saved to {output_file}")
+        
+        def load_bigwig_insulation(self):
+            pass
+        
+        def insulation_score_correlation(self, ins_scores, bigwig_signals):
+            pass
 
     class loop:
         """Nested class for analysis of loops from .hic data"""
@@ -530,67 +598,14 @@ class HiCQuery:
                     dis.append((b - a) * res)
             return dis
 
-        def loop_anchor_overlap_percent(self):
+        def loop_anchor_overlap(self):
             # TODO
             """
             Reliability: Check for overlap between loop anchors within a 1-d dist threshold
+            GT: compare lists function in juicer_tools
             """
             ground_truth_loops = self.geo_loops
             hiccups_loops = self.hiccups_merged_infile
-
-    class tad:
-        """Nested class for insulation score calculation from .hic data"""
-
-        def __init__(self, parent, config):
-            self.parent = parent
-
-        def get_insulation_score(self, m, windowsize=500000, res=10000):
-            """
-            needs <10kb bin size to detect tads using diamond score method and >100M total filtered reads mapped to the genome
-            """
-            windowsize_bin = int(windowsize / res)
-            m = np.nan_to_num(m)
-            score = np.ones((m.shape[0]))
-            for i in range(0, m.shape[0]):
-                with np.errstate(divide="ignore", invalid="ignore"):
-                    v = np.sum(
-                        m[
-                            max(0, i - windowsize_bin) : i,
-                            i + 1 : min(m.shape[0] - 1, i + windowsize_bin + 1),
-                        ]
-                    ) / (
-                        np.sum(
-                            m[
-                                max(0, i - windowsize_bin) : min(
-                                    m.shape[0], i + windowsize_bin + 1
-                                ),
-                                max(0, i - windowsize_bin) : min(
-                                    m.shape[0], i + windowsize_bin + 1
-                                ),
-                            ]
-                        )
-                    )
-                    if np.isnan(v):
-                        v = 1.0
-                score[i] = v
-            # get log2 of the score
-            # score[score == 0] = 1
-            # score = np.log2(score)
-            return score
-
-        def ins_to_bigwig(bins, ins_values, chromsizes, output_file="ins.bw"):
-            ins_values = ins_values.flatten()
-            chroms = bins["chrom"].values
-            chroms = np.array([chroms[i].encode() for i in range(len(chroms))])
-            starts = bins["start"].values.astype(int)
-            ends = bins["end"].values.astype(int)
-            # adding chromsize header to bigwig file
-            bw = pyBigWig.open(output_file, "w")
-            bw.addHeader(list(chromsizes.items()))  # dict of 'chr' and 'size'
-            # adding entries (bulk addition as each chroms, starts, ends, values can be numpy arrays)
-            bw.addEntries(chroms, starts, ends=ends, values=ins_values)
-            bw.close()
-            print(f"BigWig file saved to {output_file}")
 
 
 class DataLoader(HiCQuery):
