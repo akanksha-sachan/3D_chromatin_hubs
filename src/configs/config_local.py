@@ -1,35 +1,37 @@
 """config file to specify params for runs"""
 #set cell type and resolution to load files from 
-
+# pylint: disable=all
 class Config:
     """Main config class to store parameters and paths for the workflow"""
 
     def __init__(self):
-        self.genomic_params = self.genomic_params()
-        #set currents for runs
-        self.current_cell_type = self.genomic_params.cell_types[0]
-        self.current_res_str = self.genomic_params.res_strs[0]
-        self.current_res = self.genomic_params.resolutions[0]
+        self.genomic_params = self.param_lists()
+        #set currents from lists for individual runs
+        self.current_cell_type = self.param_lists.cell_types[0]
+        self.current_res_str = self.param_lists.res_strs[0]
+        self.current_res = self.param_lists.resolutions[0]
+        self.affinity_key = f"OE_{self.current_res_str}_affinity" #for saving the affinity plots to this folder
+        self.ref_genome = "hg38"  # used to read paths dynamically in config file
+        self.hic_norm = "KR"  # vanilla coverage normalization
+        self.min_distance_threshold = 1000000 # minimum distance threshold for edge filtering
+        self.max_distance_threshold = 10000000
+        self.noise_threshold = 0.5 # threshold for observed over expected matrix query of edges; tweak based on single chr viz
+        self.nodeset_key = "oe_intra_0_5" #key for every graph type (OE/loop) to query from .h5 file
+        self.start = 0 # start index for OE numpy slice for visualization
+        self.end = 72000000 # end index for OE numpy slice for visualization
         self.paths = self.paths(self.current_cell_type, self.current_res_str)
     
-    class genomic_params:
-        """Nested class to store genomic parameters for the workflow"""
+    class param_lists:
+        """Nested class to store genomic parameter lists for the workflow"""
 
         def __init__(self):
             self.cell_types = ["GM12878", "K562"]
-            self.ref_genome = "hg38"  # used to read paths dynamically in config file
-            self.resolutions = [1000000, 500000, 100000, 10000]  # list of integers to query
+            self.resolutions = [1000000, 100000, 10000]  # list of integers to query
             self.res_strs = [
                 "1Mb",
-                "500kb",
                 "100kb",
                 "10kb"
             ]  # list of strings based on standard naming convention of resolutions
-            self.affinity_key = f"OE_{self.res_strs[0]}_affinity" #for saving the affinity plots to this folder
-            self.hic_norm = "VC"  # vanilla coverage normalization
-            self.nodeset_key = "oe_intra_0" #key for every graph type (OE/loop) to query from .h5 file
-            self.min_distance_threshold = 10000000 # minimum distance threshold for edge filtering
-            self.max_distance_threshold = 100000000
             self.chromosomes = [
                 "chr1",
                 "chr2",
@@ -56,12 +58,6 @@ class Config:
                 "chrX",
                 "chrY",
             ]  # list of strings based on standard naming convention of chromosomes
-            self.oe_matrix_viz()
-        
-        def oe_matrix_viz(self):
-            self.noise_threshold = 0 # threshold for observed over expected matrix query of edges; tweak based on single chr viz
-            self.start = 0 # start index for OE numpy slice for visualization
-            self.end = 72000000 # end index for OE numpy slice for visualization
 
     class paths:
         """Nested class to store input file paths"""

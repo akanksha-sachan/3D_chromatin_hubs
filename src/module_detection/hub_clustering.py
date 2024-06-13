@@ -138,12 +138,28 @@ class HiCGraph:
         
         print(f"Nodes CSV saved to {nodes_csv_path}")
         print(f"Edges CSV saved to {edges_csv_path}")
-
-    def save_affinity_matrix(self):
-        """useful for multiprocessing on whole genome: save affinity matrix to disk as pkl for plotting if needed"""
-        outfile = f"{self.affinity_plot_dir}/{self.chrom}_affinity.pkl"
-        with open(outfile, "wb") as file:
-            pickle.dump(self.affinity_matrix, file)
+    
+    def save_graph_as_gexf(self):
+        """save the graph as gexf for visualization
+        Params: nodeset_attrs: {start: idx} dict for adding nodes
+                edge_df: edgelist df for adding edge weights
+        """
+        G = nx.Graph()
+        # add nodes from nodeset
+        for start, set_idx in self.nodeset_attrs.items():
+            node_label = f"{self.chrom}:{start}"
+            G.add_node(set_idx, label=node_label)
+        # add edges from edgelist, map nodes in edgelist to nodes in the nx graph using start
+        for _, row in self.edge_df.iterrows():
+            start_x, start_y = row["x1"], row["y1"]
+            start_x_set_idx, start_y_set_idx = (
+                self.nodeset_attrs[start_x],
+                self.nodeset_attrs[start_y],
+            )
+            G.add_edge(start_x_set_idx, start_y_set_idx, weight=row["counts"])
+        # write to gexf
+        outfile = f"{self.affinity_plot_dir}/{self.chrom}_affinity.gexf"
+        nx.write_gexf(G, outfile)
 
 
 class SpectralCluster(HiCGraph):
