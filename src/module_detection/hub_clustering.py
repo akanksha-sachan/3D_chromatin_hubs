@@ -112,9 +112,9 @@ class Graph:
             pickle.dump(self.affinity_matrix, file) 
 
 
-class ClusterOld(Graph):
+class SpectralCluster(Graph):
     """
-    spectral clustering on intra chr graph built from OE edges
+    spectral clustering class using scikit-learn's SpectralClustering implementation
     """
 
     def __init__(self, config, chrom, current_res, current_res_str, nodeset_key, n_clusters=2):
@@ -233,9 +233,15 @@ class ClusterOld(Graph):
             return (precision, recall, f1)
 
 
-class RecursiveCluster(Graph):
+class NormCut(Graph):
     """
-    Multispectral adoption from Mochi without any clique constraints
+    Implementation of recursive bipartitioning using Normalized Cut for finding modules
+    
+    Reference
+    ---------
+    Jianbo Shi and Jitendra Malik. Normalized Cuts and Image Segmentation.
+    IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE,
+    VOL. 22, NO. 8, AUGUST 2000.
     """
 
     def __init__(self, config, chrom, current_res, current_res_str, nodeset_key, n_clusters=2):
@@ -248,102 +254,15 @@ class RecursiveCluster(Graph):
         # instantiate nested classes
         self.evaluation = self.evaluation(self)  
 
-    def spectral_edge_conductance_clustering(self):
-        """perform spectral clustering on the affinity matrix by minimizing edge conductance"""
-        affinity_matrix = np.copy(self.affinity_matrix.toarray())
-        number_nodes = affinity_matrix.shape[0]
-        diagonal_matrix = np.diag(np.sum(affinity_matrix,axis = 0)* 1.0)
-        inv_root_diagonal_matrix = np.diag((np.sum(affinity_matrix,axis = 0)*1.0) ** -0.5)
-        laplacian_matrix = np.dot(inv_root_diagonal_matrix,diagonal_matrix-affinity_matrix).dot(inv_root_diagonal_matrix)
-        
-        #get eigen vectors
-        eigen_values,eigen_vectors = np.linalg.eigh(laplacian_matrix)
-        eigen_vectors= eigen_vectors.T
-        index_second_smallest_eigen_value = np.argsort(eigen_values)
-        eigen_vectors = eigen_vectors[index_second_smallest_eigen_value]
-        z = eigen_vectors[1] #eigen vector corresponding to second smallest eigen value
-        
-        #get spectral order
-        spectral_order_value = inv_root_diagonal_matrix.dot(z)
-        spectral_order = np.argsort(spectral_order_value)
-       
-        #sort the affinity matrix
-        affinity_matrix = affinity_matrix[spectral_order,:]
-        affinity_matrix = affinity_matrix[:,spectral_order]
-        
-        #get row sum and lower triangular sum vectors
-        A_lower_tril = np.tril(affinity_matrix,k = -1)
-        A_sum = np.sum(affinity_matrix,axis = 1)
-        A_lower_sum = np.sum(A_lower_tril,axis = 1)
-        
-        #get conductance score    
-        volumes = np.cumsum(A_sum)
-        a = A_sum - 2*A_lower_sum
-        num_cut = np.cumsum(a) 
-        total_vol = np.sum(affinity_matrix)
-        volumes_other = total_vol - volumes
-        vols = np.min([volumes,volumes_other],axis = 0)
-        score = num_cut[:-1] / vols[:-1]
-        min_index = np.argmin(score)
-
-        #store S, S_complement and score
-        self.score = score[min_index]
-        self.index1 = spectral_order[0:min_index+1]
-        self.index2 = spectral_order[min_index+1:]
-        self.index1.sort()
-        self.index2.sort()
-        
-        #store cluster labels of nodetset S and S_complement
-        self.cluster_labels = np.zeros(number_nodes)
-        self.cluster_labels[self.index1] = 1
-        self.cluster_labels[self.index2] = 2
-        #append cluster labels to nodeset_attrs dict
-        nodeset_dict = self.nodeset_attrs  # {start:set_idx}
-        nodeset_dict = {
-            start: (set_idx, self.cluster_labels[set_idx])
-            for start, set_idx in nodeset_dict.items()
-        }
-        self.nodeset_attrs_conductance = nodeset_dict
-    
-    def save_nodeset_attrs_conductance(self):
-        #save the nodeset_attrs to disk as pkl in the same dir as affinity matrix pkl
-        outfile = f"{self.affinity_plot_dir}/{self.chrom}_nodeset_attrs_conductance.pkl"
-        with open(outfile, 'wb') as file:
-            pickle.dump(self.nodeset_attrs_conductance, file)
-    
-    def create_gexf(self):
-        """store the clusters in a gexf format for viz"""
-        G = nx.Graph()
-        # add nodes from nodeset
-        for start, (set_idx, cluster_label) in self.nodeset_attrs_conductance.items():
-            G.add_node(
-                set_idx,
-                start=str(start),
-                cluster_label=cluster_label,
-            )
-        # add edges from edgelist, map nodes in edgelist to nodes in the nx graph using start
-        for _, row in self.edge_df.iterrows():
-            start_x, start_y = row["x1"], row["y1"]
-            start_x_set_idx, start_y_set_idx = (
-                self.nodeset_attrs_conductance[start_x][0],
-                self.nodeset_attrs_conductance[start_y][0],
-            )
-            G.add_edge(start_x_set_idx, start_y_set_idx, weight=row["counts"])
-        # write to gexf
-        outfile = (
-            f"{self.graphs_outdir}/{self.chrom}_{self.query_key_edge}_conductance.gexf"
-        )
-        nx.write_gexf(G, outfile)
-
     class evaluation:
-        """class to calculate accuracy metrics for A/B clustering"""
+        """class to calculate accuracy metrics for NormCut using stability and scores"""
 
         def __init__(self, parent):
             self.parent = parent
 
 def run_single_chrom(chrom, config, res, res_str, nodeset_key):
     """perform spectral clustering on single intra-chromosomal graph"""
-    modules = ClusterOld(config, chrom, res, res_str, nodeset_key, n_clusters=2) #initializes graph object as well
+    modules = SpectralCluster(config, chrom, res, res_str, nodeset_key, n_clusters=2) #initializes graph object as well
     modules.spectral_clustering() 
     modules.save_nodeset_attrs() #gives nodeset_attrs as pkl in the affinity matrix dir
     modules.create_gexf() #gives graph objects
@@ -364,7 +283,7 @@ def run_parallel(config):
 
 def run_single_chrom_eval(chrom, config, res, res_str, nodeset_key):
     """use for loop for evaluation, multiprocessing this gives errors"""
-    modules = ClusterOld(config, chrom, res, res_str, nodeset_key, n_clusters=2) #initializes graph object as well
+    modules = SpectralCluster(config, chrom, res, res_str, nodeset_key, n_clusters=2) #initializes graph object as well
     modules.spectral_clustering() 
     modules.save_nodeset_attrs() #gives nodeset_attrs as pkl in the affinity matrix dir
     conf_mtx = modules.ab_evaluation.oe_confusion_matrix()

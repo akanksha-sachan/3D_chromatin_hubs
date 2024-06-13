@@ -5,4 +5,3 @@ from .utils import *
 from .configs import *
 from .preprocessing import *
 from .module_detection import *
-from .postprocessing import *

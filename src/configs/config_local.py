@@ -57,7 +57,7 @@ class Config:
             self.oe_matrix_viz()
         
         def oe_matrix_viz(self):
-            self.threshold = 0 # threshold for observed over expected matrix query of edges; tweak based on single chr viz
+            self.noise_threshold = 0 # threshold for observed over expected matrix query of edges; tweak based on single chr viz
             self.start = 0 # start index for OE numpy slice for visualization
             self.end = 72000000 # end index for OE numpy slice for visualization
 
