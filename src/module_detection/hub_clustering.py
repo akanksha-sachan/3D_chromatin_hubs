@@ -1,4 +1,4 @@
-######### EGDELIST (HDF5) -> clusters of graph #########
+######### EDGELIST (HDF5) -> clusters of graph #########
 
 # pylint: disable=all
 
@@ -54,13 +54,13 @@ class HiCGraph:
         self.edge_df = None  # extracted df for quick access
         self.nodeset_attrs = None  # {start:(idx, attrs)} : start indicates the genomic loci of the node, and idx is nodeset order
         self.affinity_matrix = None  # affinity matrix to represent constructed graph
-        self.affinity_key = config.genomic_params.affinity_key
+        self.affinity_key = config.affinity_key
         self.affinity_plot_dir = os.path.join(
             config.paths.temp_dir, f"affinity_matrices/{self.affinity_key}"
         )
         os.makedirs(self.affinity_plot_dir, exist_ok=True)  # create if not exists
-        self.min_distance_threshold = config.genomic_params.min_distance_threshold
-        self.max_distance_threshold = config.genomic_params.max_distance_threshold
+        self.min_distance_threshold = config.min_distance_threshold
+        self.max_distance_threshold = config.max_distance_threshold
 
     def load_edges(self):
         """extract pandas dataframe dataset for building graph from h5 per chr
@@ -158,7 +158,8 @@ class HiCGraph:
             )
             G.add_edge(start_x_set_idx, start_y_set_idx, weight=row["counts"])
         # write to gexf
-        outfile = f"{self.affinity_plot_dir}/{self.chrom}_affinity.gexf"
+        dist_thresh = format_loci_string(config.min_distance_threshold, config.max_distance_threshold, '1Mb') #get string for dist thresh
+        outfile = f"{self.affinity_plot_dir}/{self.chrom}_{dist_thresh}_affinity.gexf"
         nx.write_gexf(G, outfile)
 
 
@@ -368,9 +369,9 @@ def run_parallel(config):
                 config=config,
                 res=config.current_res,
                 res_str=config.current_res_str,
-                nodeset_key=config.genomic_params.nodeset_key,
+                nodeset_key=config.nodeset_key,
             ),
-            config.genomic_params.chromosomes,
+            config.param_lists.chromosomes,
         )
 
 
@@ -388,16 +389,17 @@ def run_single_chrom_ab_eval(chrom, config, res, res_str, nodeset_key):
 
 def whole_genome_ab_eval(config):
     """calculate evaluation metrics for whole genome together"""
-    for chrom in config.genomic_params.chromosomes:
+    for chrom in config.param_lists.chromosomes:
         _, accuracy_metrics_tuple = run_single_chrom_ab_eval(
             chrom,
             config,
             config.current_res,
             config.current_res_str,
-            config.genomic_params.nodeset_key,
+            config.nodeset_key,
         )
         print(f"Chrom: {chrom}, Accuracy Metrics: {accuracy_metrics_tuple}")
 
 
 if __name__ == "__main__":
     config = Config()
+

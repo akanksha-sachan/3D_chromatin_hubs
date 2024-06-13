@@ -61,7 +61,7 @@ class HiCQuery:
         self.res = res
         self.res_str = res_str
         self.hic_file = config.paths.hic_infile  # path to .hic file
-        self.hic_norm = config.genomic_params.hic_norm  # normalization method to query
+        self.hic_norm = config.hic_norm  # normalization method to query
         self.hic = hicstraw.HiCFile(self.hic_file)  # hic object from straw
         print("HiC file loaded")
 
@@ -73,7 +73,7 @@ class HiCQuery:
         self.tad = self.tad(self, config)
 
         # checking for data availability
-        self.res_list = config.genomic_params.resolutions
+        self.res_list = config.param_lists.resolutions
         if not self.resolutions_present():
             raise ValueError("Queried resolutions are not present in .hic file")
 
@@ -734,14 +734,14 @@ if __name__ == "__main__":
 
     # whole genome run test
     config = Config()
-    chromosomes = config.genomic_params.chromosomes
+    chromosomes = config.param_lists.chromosomes
     current_res = config.current_res
     current_res_str = config.current_res_str
 
     # params for OE matrix visualisation
-    threshold = config.genomic_params.threshold
-    start = config.genomic_params.start
-    end = config.genomic_params.end
+    threshold = config.noise_threshold
+    start = config.start
+    end = config.end
 
     # directory to save plots
     output_dir_oe_plot = os.path.join(
