@@ -16,15 +16,18 @@ import hicstraw
 import numpy as np
 import pandas as pd
 import pyBigWig
+import scipy.stats as stats
 from memory_profiler import profile
 from scipy.sparse import csr_matrix
-import scipy.stats as stats
+
 try:
     from scipy.stats import PearsonRConstantInputWarning
 except ImportError:
     from scipy.stats import ConstantInputWarning as PearsonRConstantInputWarning
-from sklearn.decomposition import PCA
+
 import warnings
+
+from sklearn.decomposition import PCA
 
 # add the parent directory of 'src' to the sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -132,7 +135,9 @@ class HiCQuery:
             "observed", self.hic_norm, self.hic_file, chrom, chrom, "BP", res
         )
         if threshold != 0:
-            observed_list = [record for record in observed_list if record.counts >= threshold]
+            observed_list = [
+                record for record in observed_list if record.counts >= threshold
+            ]
         return observed_list
 
     @profile
@@ -207,14 +212,14 @@ class HiCQuery:
         return df
 
     @profile
-    def records_as_csr(self, contact='observed', threshold=0):
+    def records_as_csr(self, contact="observed", threshold=0):
         """
         Convert straw object to csr matrix
         """
         res = self.res
-        if contact == 'oe':
+        if contact == "oe":
             straw_obj = self.oe_intra(threshold)
-        elif contact == 'observed':
+        elif contact == "observed":
             straw_obj = self.observed_intra(threshold)
         else:
             raise ValueError("Invalid contact type. Use 'observed' or 'oe'.")
@@ -256,37 +261,39 @@ class HiCQuery:
             Input: csr observed counts
             Output: 1D signal dict of A/B scores
             """
-            matrix = matrix.toarray() #observed straw csr matirx
-            mask = matrix.sum(axis=0) > 0 #mask out the centromeric bins, as they have column sum of data = 0
-            matrix = sqrt_norm(matrix) #normalise the raw matrix
-            matrix = oe(matrix, expected) #observed over expected matrix
-            np.fill_diagonal(matrix, 1) # ensure diagonals are 1 to ignore it
-            matrix = matrix[mask, :][:, mask] #apply mask
+            matrix = matrix.toarray()  # observed straw csr matirx
+            mask = (
+                matrix.sum(axis=0) > 0
+            )  # mask out the centromeric bins, as they have column sum of data = 0
+            matrix = sqrt_norm(matrix)  # normalise the raw matrix
+            matrix = oe(matrix, expected)  # observed over expected matrix
+            np.fill_diagonal(matrix, 1)  # ensure diagonals are 1 to ignore it
+            matrix = matrix[mask, :][:, mask]  # apply mask
             # get pearson matrix
             with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore", category=PearsonRConstantInputWarning
-                    )
+                warnings.filterwarnings("ignore", category=PearsonRConstantInputWarning)
                 matrix = pearson(matrix)
             np.fill_diagonal(matrix, 1)
             matrix[np.isnan(matrix)] = 0.0
             pca = PCA(n_components=1)
-            projected_matrix = pca.fit_transform(matrix) # 1d matrix transformed using PC1
-            
-            #ouput dict of ab_scores
+            projected_matrix = pca.fit_transform(
+                matrix
+            )  # 1d matrix transformed using PC1
+
+            # ouput dict of ab_scores
             bin_starts = self.bins_chr["start"].values  # create dict {start:pc1}
-            pc1_scores = {start: None for start in bin_starts} # initialise with None
+            pc1_scores = {start: None for start in bin_starts}  # initialise with None
             unmasked_bin_starts = bin_starts[mask]
             for i, start in enumerate(unmasked_bin_starts):
                 pc1_scores[start] = projected_matrix[i, 0]
             return pc1_scores
-        
+
         def assign_ab_compartments(self, pc1_scores, threshold=0):
             """
             Assign A/B compartments based on PC1 scores using phasing track such as GC content
             """
             pass
-        
+
         def ab_score_to_bigwig(bins, pc1_values, chromsizes, output_file="pc1.bw"):
             """
             Save pc1 as a bigwig track for one chr for visualisation on the browser
@@ -330,7 +337,7 @@ class HiCQuery:
                 if sig is None:
                     bed_signal_dict[start] = (sig, None)
                 else:
-                    ab_label = "A" if sig >= 0 else "B" 
+                    ab_label = "A" if sig >= 0 else "B"
                     bed_signal_dict[start] = (sig, ab_label)
             return bed_signal_dict
 
@@ -356,16 +363,21 @@ class HiCQuery:
             spearman_p: float
                 p-value for the Spearman correlation.
             """
-            #Handle dict or list input
+            # Handle dict or list input
             if isinstance(ab_scores, dict) and isinstance(bigwig_signals, dict):
                 common_starts = [
-                    start for start in ab_scores.keys()
+                    start
+                    for start in ab_scores.keys()
                     if start in bigwig_signals and bigwig_signals[start][0] is not None
                 ]
                 if not common_starts:
-                    raise ValueError("No common starts found with valid signals for correlation analysis.")
+                    raise ValueError(
+                        "No common starts found with valid signals for correlation analysis."
+                    )
                 ab_scores_list = np.array([ab_scores[start] for start in common_starts])
-                bigwig_signals_list = np.array([bigwig_signals[start][0] for start in common_starts])
+                bigwig_signals_list = np.array(
+                    [bigwig_signals[start][0] for start in common_starts]
+                )
             else:
                 if len(ab_scores) != len(bigwig_signals):
                     raise ValueError("Input lists must have the same length.")
@@ -378,17 +390,20 @@ class HiCQuery:
             bigwig_signals_list = bigwig_signals_list[valid_indices]
 
             # Calculate correlations
-            pearson_corr, pearson_p = stats.pearsonr(ab_scores_list, bigwig_signals_list)
-            spearman_corr, spearman_p = stats.spearmanr(ab_scores_list, bigwig_signals_list)
+            pearson_corr, pearson_p = stats.pearsonr(
+                ab_scores_list, bigwig_signals_list
+            )
+            spearman_corr, spearman_p = stats.spearmanr(
+                ab_scores_list, bigwig_signals_list
+            )
 
             # Prepare data for plotting
-            correlation_data = pd.DataFrame({
-                'Mean_AB_Bigwig_Signal': bigwig_signals_list,
-                'PC1_AB': ab_scores_list
-            })
+            correlation_data = pd.DataFrame(
+                {"Mean_AB_Bigwig_Signal": bigwig_signals_list, "PC1_AB": ab_scores_list}
+            )
 
             return correlation_data, pearson_corr, pearson_p, spearman_corr, spearman_p
-        
+
     class tad:
         """Nested class for insulation score calculation from .hic data"""
 
@@ -429,7 +444,9 @@ class HiCQuery:
             # score = np.log2(score)
             return score
 
-        def insulation_score_to_bigwig(bins, ins_values, chromsizes, output_file="ins.bw"):
+        def insulation_score_to_bigwig(
+            bins, ins_values, chromsizes, output_file="ins.bw"
+        ):
             ins_values = ins_values.flatten()
             chroms = bins["chrom"].values
             chroms = np.array([chroms[i].encode() for i in range(len(chroms))])
@@ -442,10 +459,10 @@ class HiCQuery:
             bw.addEntries(chroms, starts, ends=ends, values=ins_values)
             bw.close()
             print(f"BigWig file saved to {output_file}")
-        
+
         def load_bigwig_insulation(self):
             pass
-        
+
         def insulation_score_correlation(self, ins_scores, bigwig_signals):
             pass
 
@@ -626,9 +643,7 @@ class DataLoader(HiCQuery):
         """Save pandas df oe edges in .h5 format for each chr"""
         oe_intra_df = self.oe_intra_df(threshold)
         thresh_str = str(threshold).replace(".", "_")
-        edgelist_outfile = os.path.join(
-            self.edgelist_outdir, f"{self.chrom}.h5"
-        )
+        edgelist_outfile = os.path.join(self.edgelist_outdir, f"{self.chrom}.h5")
         with pd.HDFStore(edgelist_outfile, mode=mode) as store:
             store.put(
                 f"_{self.res_str}/oe_intra_{thresh_str}",
@@ -660,8 +675,9 @@ def single_chr_edgelist(chrom, config, res, res_str, threshold):
     loader = DataLoader(config, chrom, res, res_str)
     loader.oe_intra_edgelist_single_chr(threshold)
 
+
 def run_parallel_edgelist(config, chromosomes, res, res_str, threshold):
-    """ # multiprocessing on whole genome """
+    """# multiprocessing on whole genome"""
     with Pool() as pool:
         pool.map(
             partial(
@@ -673,6 +689,7 @@ def run_parallel_edgelist(config, chromosomes, res, res_str, threshold):
             ),
             chromosomes,
         )
+
 
 def oe_plots(chrom, config, res, res_str, output_dir_oe_plot, start, end, threshold=0):
     """
@@ -722,20 +739,22 @@ if __name__ == "__main__":
     current_res_str = config.current_res_str
 
     # params for OE matrix visualisation
-    threshold = config.genomic_params.threshold  
+    threshold = config.genomic_params.threshold
     start = config.genomic_params.start
     end = config.genomic_params.end
 
     # directory to save plots
-    output_dir_oe_plot = os.path.join(config.paths.temp_dir, f"{current_res_str}_plots/oe_plots_{threshold}")
-    os.makedirs(output_dir_oe_plot, exist_ok=True) #create if not exists
+    output_dir_oe_plot = os.path.join(
+        config.paths.temp_dir, f"{current_res_str}_plots/oe_plots_{threshold}"
+    )
+    os.makedirs(output_dir_oe_plot, exist_ok=True)  # create if not exists
     # custom colormap
     REDMAP = LinearSegmentedColormap.from_list("bright_red", [(1, 1, 1), (1, 0, 0)])
 
     # write edgelist file for whole genome
-    #run_parallel_edgelist(config, chromosomes, current_res, current_res_str, threshold)
-    
-    #get oe plots
+    # run_parallel_edgelist(config, chromosomes, current_res, current_res_str, threshold)
+
+    # get oe plots
     run_parallel_oe_plots(
         config,
         chromosomes,
@@ -746,7 +765,7 @@ if __name__ == "__main__":
         end,
         threshold,
     )
-    
+
     # chrom = chromosomes[0]
     # query = HiCQuery(config, chrom, current_res, current_res_str)
     # print(query.ab_comp.load_bigwig_chromosomal_ab())  # 249 bins for chr1

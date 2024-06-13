@@ -27,7 +27,9 @@ class Config:
             ]  # list of strings based on standard naming convention of resolutions
             self.affinity_key = f"OE_{self.res_strs[0]}_affinity" #for saving the affinity plots to this folder
             self.hic_norm = "VC"  # vanilla coverage normalization
-            self.nodeset_key = "oe_intra_0" #oe_intra_0_5 change for every graph type (OE/loop)
+            self.nodeset_key = "oe_intra_0" #key for every graph type (OE/loop) to query from .h5 file
+            self.min_distance_threshold = 10000000 # minimum distance threshold for edge filtering
+            self.max_distance_threshold = 100000000
             self.chromosomes = [
                 "chr1",
                 "chr2",
