@@ -5,7 +5,7 @@ class Config:
     """Main config class to store parameters and paths for the workflow"""
 
     def __init__(self):
-        self.genomic_params = self.param_lists()
+        self.param_lists = self.param_lists()
         #set currents from lists for individual runs
         self.current_cell_type = self.param_lists.cell_types[0]
         self.current_res_str = self.param_lists.res_strs[0]
