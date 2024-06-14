@@ -10,13 +10,17 @@ class Config:
         self.current_cell_type = self.param_lists.cell_types[0]
         self.current_res_str = self.param_lists.res_strs[0]
         self.current_res = self.param_lists.resolutions[0]
-        self.affinity_key = f"OE_{self.current_res_str}_affinity" #for saving the affinity plots to this folder
+        
         self.ref_genome = "hg38"  # used to read paths dynamically in config file
         self.hic_norm = "KR"  # vanilla coverage normalization
-        self.min_distance_threshold = 1000000 # minimum distance threshold for edge filtering
-        self.max_distance_threshold = 10000000
-        self.noise_threshold = 0.5 # threshold for observed over expected matrix query of edges; tweak based on single chr viz
-        self.nodeset_key = "oe_intra_0_5" #key for every graph type (OE/loop) to query from .h5 file
+
+        ## Distance thresholding filter ##
+        self.long_range_window_width = 90000000 # width of 1-d genomic window to include in hic input map
+        self.long_range_min_distance = 50000000 # distance from diagonal to start the filter from (removing local loops/other interactions)
+        
+        self.noise_threshold = 0 # threshold for observed over expected matrix query of edges; tweak based on single chr viz
+        self.nodeset_key = "oe_intra_0" #key for every graph type (OE/loop) to query from .h5 file
+        self.affinity_key = f"OE_{self.current_res_str}_affinity" #for saving the affinity plots to this folder
         self.start = 0 # start index for OE numpy slice for visualization
         self.end = 72000000 # end index for OE numpy slice for visualization
         self.paths = self.paths(self.current_cell_type, self.current_res_str)

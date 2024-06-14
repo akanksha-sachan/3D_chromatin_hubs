@@ -59,8 +59,24 @@ class HiCGraph:
             config.paths.temp_dir, f"affinity_matrices/{self.affinity_key}"
         )
         os.makedirs(self.affinity_plot_dir, exist_ok=True)  # create if not exists
-        self.min_distance_threshold = config.min_distance_threshold
-        self.max_distance_threshold = config.max_distance_threshold
+
+        # long-range window filter parameters
+        self.long_range_window_width = config.long_range_window_width
+        self.long_range_min_distance = config.long_range_min_distance
+
+        # set chromosome length
+        self.chromosome_length = self.get_chromosome_length()
+
+    def get_chromosome_length(self):
+        """Read chromosome length from the ref_genome.chrom.sizes file."""
+        chrom_sizes_infile = self.config.paths.chrom_sizes_infile
+        chrom_sizes = pd.read_csv(
+            chrom_sizes_infile, sep="\t", header=None, names=["chrom", "size"]
+        )  # file has no header
+        chrom_length = chrom_sizes.loc[
+            chrom_sizes["chrom"] == self.chrom, "size"
+        ].values[0]
+        return chrom_length
 
     def load_edges(self):
         """extract pandas dataframe dataset for building graph from h5 per chr
@@ -77,16 +93,19 @@ class HiCGraph:
         with pd.HDFStore(self.edgelist_h5_infile, mode="r") as store:
             self.edge_df = store[dataset_path]
 
-    def apply_genomic_distance_filter(self):
+    def apply_genomic_distance_filter(self, current_filter_start):
         """apply genomic distance filter to the edgelist df to select only long range interactions"""
-        distances = abs(
-            self.edge_df["x1"] - self.edge_df["y1"]
-        )  # separation between bin starts
+        window_width = self.long_range_window_width
+        if current_filter_start + window_width > self.chromosome_length:
+            raise ValueError(
+                "The start position and window width exceed the chromosome length."
+            )
+        end_distance = current_filter_start + window_width
         filtered_df = self.edge_df[
-            (distances >= self.min_distance_threshold)
-            & (distances <= self.max_distance_threshold)
+            (abs(self.edge_df["x1"] - self.edge_df["y1"]) >= current_filter_start)
+            & (abs(self.edge_df["x1"] - self.edge_df["y1"]) < end_distance)
         ]
-        self.edge_df = filtered_df  # update the edge_df to only include filtered edges
+        self.edge_df = filtered_df
 
     def edgelist_to_csr_affinity_matrix(self):
         """convert edgelist pandas df graph to a CSR matrix graph (affinity matrix) for clustering
@@ -121,24 +140,31 @@ class HiCGraph:
 
     def save_thresholded_graph_to_neo4j_csv(self):
         """save the thresholded edgelist to disk for plotting in neo4j"""
-            # Create nodes dataframe
-        nodes = [{'id': idx, 'label': loci} for loci, idx in self.nodeset_attrs.items()]
+        # Create nodes dataframe
+        nodes = [{"id": idx, "label": loci} for loci, idx in self.nodeset_attrs.items()]
         nodes_df = pd.DataFrame(nodes)
 
         # Create edges dataframe
         row, col = self.affinity_matrix.nonzero()
-        edges = [{'source': row[i], 'target': col[i], 'weight': self.affinity_matrix[row[i], col[i]]} for i in range(len(row))]
+        edges = [
+            {
+                "source": row[i],
+                "target": col[i],
+                "weight": self.affinity_matrix[row[i], col[i]],
+            }
+            for i in range(len(row))
+        ]
         edges_df = pd.DataFrame(edges)
-        
+
         # Save nodes and edges to CSV
         nodes_csv_path = f"{self.affinity_plot_dir}/{self.chrom}_nodes.csv"
         edges_csv_path = f"{self.affinity_plot_dir}/{self.chrom}_edges.csv"
         nodes_df.to_csv(nodes_csv_path, index=False)
         edges_df.to_csv(edges_csv_path, index=False)
-        
+
         print(f"Nodes CSV saved to {nodes_csv_path}")
         print(f"Edges CSV saved to {edges_csv_path}")
-    
+
     def save_graph_as_gexf(self):
         """save the graph as gexf for visualization
         Params: nodeset_attrs: {start: idx} dict for adding nodes
@@ -158,7 +184,9 @@ class HiCGraph:
             )
             G.add_edge(start_x_set_idx, start_y_set_idx, weight=row["counts"])
         # write to gexf
-        dist_thresh = format_loci_string(config.min_distance_threshold, config.max_distance_threshold, '1Mb') #get string for dist thresh
+        dist_thresh = format_loci_string(
+            config.min_distance_threshold, config.max_distance_threshold, "1Mb"
+        )  # get string for dist thresh
         outfile = f"{self.affinity_plot_dir}/{self.chrom}_{dist_thresh}_affinity.gexf"
         nx.write_gexf(G, outfile)
 
@@ -400,6 +428,12 @@ def whole_genome_ab_eval(config):
         print(f"Chrom: {chrom}, Accuracy Metrics: {accuracy_metrics_tuple}")
 
 
-if __name__ == "__main__":
-    config = Config()
-
+# if __name__ == "__main__":
+#     config = Config()
+#     chrom = config.param_lists.chromosomes[0]
+#     current_res = config.current_res
+#     current_res_str = config.current_res_str
+#     oe_graph = HiCGraph(config, chrom, current_res, current_res_str, config.nodeset_key) #create graph object
+#     oe_graph.load_edges()
+#     oe_graph.apply_genomic_distance_filter()
+#     print(oe_graph.edge_df.head())
