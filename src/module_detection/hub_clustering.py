@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, dia_matrix
 from sklearn.cluster import SpectralClustering
 from sklearn.decomposition import PCA
 from sklearn.metrics import f1_score, precision_score, recall_score
@@ -65,9 +65,9 @@ class HiCGraph:
         self.long_range_min_distance = config.long_range_min_distance
 
         # set chromosome length
-        self.chromosome_length = self.get_chromosome_length()
+        self.chromosome_length = self.get_current_chromosome_length()
 
-    def get_chromosome_length(self):
+    def get_current_chromosome_length(self):
         """Read chromosome length from the ref_genome.chrom.sizes file."""
         chrom_sizes_infile = self.config.paths.chrom_sizes_infile
         chrom_sizes = pd.read_csv(
@@ -109,26 +109,21 @@ class HiCGraph:
 
     def edgelist_to_csr_affinity_matrix(self):
         """convert edgelist pandas df graph to a CSR matrix graph (affinity matrix) for clustering
-        Returns: affinity_matrix: csr_matrix; nodeset_attrs: {start: idx} dict
+        Returns: affinity_matrix: csr_matrix (W); nodeset_attrs: {start: idx} dict
         """
-        nodeset = pd.unique(
-            self.edge_df[["x1", "y1"]].values.ravel("K")
-        )  # node set: stores unique starts
-        self.nodeset_attrs = {
-            start: set_idx for set_idx, start in enumerate(nodeset)
-        }  # save in format (loci start: idx of nodeset)
-        rows_node_id = self.edge_df["x1"].map(
-            self.nodeset_attrs
-        )  # assigning nodeset id to edgelist nodes using start
+        # (loci start: idx of nodeset) dict for adding nodes
+        nodeset = pd.unique(self.edge_df[["x1", "y1"]].values.ravel("K"))
+        self.nodeset_attrs = {start: set_idx for set_idx, start in enumerate(nodeset)}
+        # assigning nodeset id to edgelist nodes using start
+        rows_node_id = self.edge_df["x1"].map(self.nodeset_attrs)
         cols_node_id = self.edge_df["y1"].map(self.nodeset_attrs)
         weights = self.edge_df["counts"].values  # edge weights
-        num_nodes = len(
-            nodeset
-        )  # create affinity matrix of only current edges and not whole chr.
+        # create affinity matrix of only current edges and not whole chr
+        num_nodes = len(nodeset)
         affinity_matrix = csr_matrix(
             (weights, (rows_node_id, cols_node_id)), shape=(num_nodes, num_nodes)
         )
-        # make upper triangular matrix symmetric (not needed for spectral clustering but for visualization of graph)
+        # make the affinity matrix symmetric by adding the transpose of it
         self.affinity_matrix = (
             affinity_matrix
             + affinity_matrix.T
@@ -137,14 +132,27 @@ class HiCGraph:
                 shape=(num_nodes, num_nodes),
             )
         )
+        return self.affinity_matrix, self.nodeset_attrs
+
+    def compute_diagonal_matrix(self):
+        """
+        Compute the diagonal matrix D for the CSR affinity matrix.
+        Returns
+        D : dia_matrix; The diagonal matrix of the graph. D[i, i] is the sum of weights of all edges incident on i
+        """
+        if self.affinity_matrix is None:
+            raise ValueError("Affinity matrix has not been computed yet.")
+        # sum of weights of all edges (all columns) incident on each node (row)
+        degrees = np.array(self.affinity_matrix.sum(axis=1)).flatten()
+        D = dia_matrix((degrees, [0]), shape=self.affinity_matrix.shape)
+        return D
 
     def save_thresholded_graph_to_neo4j_csv(self):
         """save the thresholded edgelist to disk for plotting in neo4j"""
-        # Create nodes dataframe
+        # create nodes dataframe
         nodes = [{"id": idx, "label": loci} for loci, idx in self.nodeset_attrs.items()]
         nodes_df = pd.DataFrame(nodes)
-
-        # Create edges dataframe
+        # create edges dataframe
         row, col = self.affinity_matrix.nonzero()
         edges = [
             {
@@ -155,8 +163,7 @@ class HiCGraph:
             for i in range(len(row))
         ]
         edges_df = pd.DataFrame(edges)
-
-        # Save nodes and edges to CSV
+        # save nodes and edges to CSV
         nodes_csv_path = f"{self.affinity_plot_dir}/{self.chrom}_nodes.csv"
         edges_csv_path = f"{self.affinity_plot_dir}/{self.chrom}_edges.csv"
         nodes_df.to_csv(nodes_csv_path, index=False)
@@ -194,6 +201,7 @@ class HiCGraph:
 class SpectralCluster(HiCGraph):
     """
     spectral clustering class using scikit-learn's SpectralClustering implementation
+    Usage: two partitioning HiC graph to see if compartments are clustered
     """
 
     def __init__(
@@ -325,18 +333,16 @@ class SpectralCluster(HiCGraph):
                     [1] * confusion_matrix[1, 1],
                 ]
             )
-
             precision = precision_score(true_labels, pred_labels)
             recall = recall_score(true_labels, pred_labels)
             f1 = f1_score(true_labels, pred_labels)
-
             accuracy_metrics_dict = {
                 "chrom": self.parent.chrom,
                 "precision": precision,
                 "recall": recall,
                 "f1": f1,
             }
-
+            #save to csv
             df = pd.DataFrame([accuracy_metrics_dict])
             df.to_csv(
                 self.metrics_csv_file,
@@ -344,13 +350,13 @@ class SpectralCluster(HiCGraph):
                 header=not os.path.exists(self.metrics_csv_file),
                 index=False,
             )
-
             return (precision, recall, f1)
 
 
 class RecursiveNormCut(HiCGraph):
     """
-    Implementation of recursive bipartitioning using Normalized Cut for finding modules
+    Implementation of recursive bipartitioning (two-way) using Normalized Cut
+    Usage: recursively partitioning the HiC graph to find hubs
 
     Reference
     ---------
@@ -362,14 +368,27 @@ class RecursiveNormCut(HiCGraph):
     def __init__(
         self, config, chrom, current_res, current_res_str, nodeset_key, n_clusters=2
     ):
+        ## loading HiC data into graph object ##
         super().__init__(config, chrom, current_res, current_res_str, nodeset_key)
         self.load_edges()  # call function from parent to load edges
-        self.edgelist_to_csr_affinity_matrix()  # call function from parent to load affinity matrix from edges
-        self.cluster_labels = None
-        self.graphs_outdir = config.paths.gexf_dir
+        self.edgelist_to_csr_affinity_matrix()  # call function from parent to create W
+        self.compute_diagonal_matrix()  # call function from parent to create D
+        self.subgraph_labels = None
+        self.graphs_outdir = (
+            config.paths.gexf_dir
+        )  
+
+        # attributes for recursive norm cut 
+        self.subgraph_list = []  # list to store subgraphs
 
         # instantiate nested classes
         self.evaluation = self.evaluation(self)
+
+    def bipartition_norm_cut(self):
+        """perform two way normalized cut/bipartitioning on the affinity matrix
+        usage: base function for recursive bipartitioning
+        """
+        pass
 
     class evaluation:
         """class to calculate accuracy metrics for NormCut using stability and scores"""
@@ -428,12 +447,9 @@ def whole_genome_ab_eval(config):
         print(f"Chrom: {chrom}, Accuracy Metrics: {accuracy_metrics_tuple}")
 
 
-# if __name__ == "__main__":
-#     config = Config()
-#     chrom = config.param_lists.chromosomes[0]
-#     current_res = config.current_res
-#     current_res_str = config.current_res_str
-#     oe_graph = HiCGraph(config, chrom, current_res, current_res_str, config.nodeset_key) #create graph object
-#     oe_graph.load_edges()
-#     oe_graph.apply_genomic_distance_filter()
-#     print(oe_graph.edge_df.head())
+if __name__ == "__main__":
+    config = Config()
+    chrom = config.param_lists.chromosomes[0]
+    current_res = config.current_res
+    current_res_str = config.current_res_str
+    
